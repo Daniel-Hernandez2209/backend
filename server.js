@@ -1,4 +1,4 @@
-// server.js - Backend principal actualizado para ATHENA BRAND
+// server.js - Backend principal con controladores implementados
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -14,25 +14,21 @@ const app = express();
 // MIDDLEWARE DE SEGURIDAD Y OPTIMIZACIÓN
 // ===========================================
 
-// Helmet para seguridad
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Compresión GZIP
 app.use(compression());
 
-// Logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
   app.use(morgan('combined'));
 }
 
-// Rate limiting global
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // máximo 100 requests por ventana
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: {
     success: false,
     message: 'Demasiadas solicitudes. Intenta de nuevo más tarde.'
@@ -42,7 +38,6 @@ const globalLimiter = rateLimit({
 });
 app.use('/api', globalLimiter);
 
-// CORS configurado para desarrollo y producción
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
@@ -52,7 +47,6 @@ const corsOptions = {
       'https://www.athenabrand.co'
     ];
     
-    // Permitir requests sin origin (apps móviles, etc.)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -69,7 +63,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Body parsers
 app.use(express.json({ 
   limit: '10mb',
   verify: (req, res, buf) => {
@@ -81,24 +74,11 @@ app.use(express.urlencoded({
   limit: '10mb' 
 }));
 
-// Servir archivos estáticos
 app.use('/uploads', express.static('uploads', {
   maxAge: '1y',
   etag: true,
   lastModified: true
 }));
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    message: 'ATHENA BRAND API funcionando correctamente',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
-    version: '1.0.0'
-  });
-});
 
 // ===========================================
 // CONEXIÓN A MONGODB
@@ -114,7 +94,6 @@ const connectDB = async () => {
 
     console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
     
-    // Eventos de conexión
     mongoose.connection.on('error', (err) => {
       console.error('❌ Error en MongoDB:', err);
     });
@@ -123,7 +102,6 @@ const connectDB = async () => {
       console.log('⚠️ MongoDB desconectado');
     });
 
-    // Cerrar conexión al terminar el proceso
     process.on('SIGINT', async () => {
       await mongoose.connection.close();
       console.log('🔌 MongoDB desconectado por terminación de app');
@@ -142,7 +120,20 @@ connectDB();
 // RUTAS DE LA API
 // ===========================================
 
-// Importar rutas
+// Health check
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'ATHENA BRAND API funcionando correctamente',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+    version: '1.0.0',
+    controllers: 'Implementados'
+  });
+});
+
+// Importar rutas actualizadas con controladores
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/order');
@@ -156,13 +147,14 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
 
-// Ruta de información de la API
+// Información de la API
 app.get('/api', (req, res) => {
   res.json({
     message: '🏛️ ATHENA BRAND API',
     tagline: 'MENOS RUIDO MAS ESENCIA',
     location: 'San Pedro, Antioquia - Colombia',
     version: '1.0.0',
+    architecture: 'MVC con Controladores',
     documentation: '/api/docs',
     endpoints: {
       auth: '/api/auth',
@@ -171,6 +163,14 @@ app.get('/api', (req, res) => {
       upload: '/api/upload',
       categories: '/api/categories'
     },
+    features: [
+      'Autenticación JWT',
+      'Gestión de productos',
+      'Sistema de pedidos',
+      'Upload de imágenes',
+      'Emails transaccionales',
+      'Panel de administrador'
+    ],
     social: {
       instagram: '@athena.brand.co',
       website: 'https://athenabrand.co'
@@ -178,14 +178,21 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Ruta de documentación básica
+// Documentación de la API
 app.get('/api/docs', (req, res) => {
   res.json({
     title: 'ATHENA BRAND API Documentation',
     version: '1.0.0',
-    description: 'API para la tienda de streetwear ATHENA BRAND',
+    description: 'API para la tienda de streetwear ATHENA BRAND con arquitectura MVC',
     baseURL: req.protocol + '://' + req.get('host') + '/api',
     authentication: 'Bearer Token (JWT)',
+    controllers: {
+      AuthController: 'Manejo de autenticación y usuarios',
+      ProductController: 'Gestión de productos y búsqueda',
+      OrderController: 'Procesamiento de pedidos',
+      UploadController: 'Manejo de archivos e imágenes',
+      CategoryController: 'Gestión de categorías'
+    },
     endpoints: {
       'POST /auth/register': 'Registro de usuario',
       'POST /auth/login': 'Login de usuario',
@@ -194,9 +201,11 @@ app.get('/api/docs', (req, res) => {
       'GET /products/search': 'Buscar productos',
       'GET /products/category/:category': 'Productos por categoría',
       'GET /products/:slug': 'Detalle de producto',
-      'POST /orders': 'Crear pedido (auth required)',
+      'POST /orders': 'Crear pedido',
       'GET /orders': 'Listar pedidos del usuario (auth required)',
-      'POST /upload': 'Subir imagen (admin required)'
+      'POST /upload/products': 'Subir imagen de producto (admin required)',
+      'GET /categories': 'Listar categorías',
+      'GET /categories/:slug': 'Detalle de categoría'
     },
     categories: ['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'],
     contact: 'contacto@athenabrand.co'
@@ -207,33 +216,27 @@ app.get('/api/docs', (req, res) => {
 // MANEJO DE ERRORES
 // ===========================================
 
-// Error handler personalizado
 const errorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = err.message;
 
-  // Log del error
   console.error('❌ Error:', err);
 
-  // Mongoose bad ObjectId
   if (err.name === 'CastError') {
     const message = 'Recurso no encontrado';
     error = { message, statusCode: 404 };
   }
 
-  // Mongoose duplicate key
   if (err.code === 11000) {
     const message = 'Recurso duplicado';
     error = { message, statusCode: 400 };
   }
 
-  // Mongoose validation error
   if (err.name === 'ValidationError') {
     const message = Object.values(err.errors).map(val => val.message);
     error = { message, statusCode: 400 };
   }
 
-  // JWT errors
   if (err.name === 'JsonWebTokenError') {
     const message = 'Token inválido';
     error = { message, statusCode: 401 };
@@ -256,7 +259,7 @@ const errorHandler = (err, req, res, next) => {
 
 app.use(errorHandler);
 
-// 404 handler - debe ir al final
+// 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -267,7 +270,8 @@ app.use('*', (req, res) => {
       'GET /health',
       'POST /api/auth/register',
       'POST /api/auth/login',
-      'GET /api/products'
+      'GET /api/products',
+      'GET /api/categories'
     ]
   });
 });
@@ -276,7 +280,7 @@ app.use('*', (req, res) => {
 // INICIAR SERVIDOR
 // ===========================================
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 const server = app.listen(PORT, () => {
   console.log('\n🚀 ===================================');
