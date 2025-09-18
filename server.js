@@ -276,47 +276,4 @@ app.use('*', (req, res) => {
   });
 });
 
-// ===========================================
-// INICIAR SERVIDOR
-// ===========================================
-
-const PORT = process.env.PORT || 3001;
-
-const server = app.listen(PORT, () => {
-  console.log('\n🚀 ===================================');
-  console.log(`🏛️  ATHENA BRAND API INICIADO`);
-  console.log('📍 San Pedro, Antioquia - Colombia');
-  console.log('✨ MENOS RUIDO MAS ESENCIA');
-  console.log('🌐 Servidor ejecutándose en:');
-  console.log(`   http://localhost:${PORT}`);
-  console.log(`📚 Documentación: http://localhost:${PORT}/api/docs`);
-  console.log(`💚 Health Check: http://localhost:${PORT}/health`);
-  console.log('🔧 Modo:', process.env.NODE_ENV || 'development');
-  console.log('====================================\n');
-});
-
-// Manejo de errores del servidor
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Puerto ${PORT} ya está en uso`);
-  } else {
-    console.error('❌ Error del servidor:', error);
-  }
-});
-
-// Graceful shutdown
-process.on('unhandledRejection', (err, promise) => {
-  console.error('❌ Unhandled Promise Rejection:', err.message);
-  server.close(() => {
-    process.exit(1);
-  });
-});
-
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err.message);
-  server.close(() => {
-    process.exit(1);
-  });
-});
-
 module.exports = app;
