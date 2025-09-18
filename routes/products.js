@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Product = require('../models/Product');
+const Product = require('../models/Products');
 
 // GET /api/products - Obtener todos los productos con paginación y filtros
 router.get('/', async (req, res) => {

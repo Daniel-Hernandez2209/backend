@@ -66,7 +66,7 @@ const productSchema = new mongoose.Schema({
   
   subcategory: {
     type: String,
-    enum: ['camisetas', 'pantalones', 'sudaderas', 'chaquetas', 'accesorios', 'calzado']
+    enum: ['camisetas', 'pantalones', 'sudaderas', 'chaquetas', 'accesorios', 'calzado','conjuntos','cortavientos']
   },
   
   // Sistema de tallas colombiano
@@ -154,12 +154,7 @@ const productSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Índices para optimizar búsquedas
-productSchema.index({ category: 1, isActive: 1 });
-productSchema.index({ name: 'text', description: 'text', tags: 'text' });
-productSchema.index({ slug: 1 });
-productSchema.index({ sku: 1 });
-productSchema.index({ isFeatured: 1, isActive: 1 });
+
 
 // Virtual para precio efectivo (con o sin descuento)
 productSchema.virtual('effectivePrice').get(function() {
