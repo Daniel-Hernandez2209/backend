@@ -186,6 +186,42 @@ app.get('/api/docs', (req, res) => {
 });
 
 // ===========================================
+// TEST DE CONEXIÓN A MONGO ATLAS
+// ===========================================
+const mongoose = require("mongoose");
+
+// Modelo temporal para pruebas
+const TestSchema = new mongoose.Schema({
+  name: String,
+  createdAt: { type: Date, default: Date.now }
+});
+
+const TestModel = mongoose.models.Test || mongoose.model("Test", TestSchema);
+
+// Endpoint de prueba: inserta y lista
+app.get("/test-db", async (req, res) => {
+  try {
+    // Insertar documento de prueba
+    const doc = await TestModel.create({ name: "Hola Atlas desde Vercel" });
+
+    // Leer últimos 5 docs
+    const docs = await TestModel.find().sort({ createdAt: -1 }).limit(5);
+
+    res.json({
+      success: true,
+      inserted: doc,
+      lastDocs: docs,
+      dbName: mongoose.connection.db.databaseName,
+      host: mongoose.connection.host || "No disponible"
+    });
+  } catch (error) {
+    console.error("❌ Error en /test-db:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
+// ===========================================
 // MANEJO DE ERRORES
 // ===========================================
 
