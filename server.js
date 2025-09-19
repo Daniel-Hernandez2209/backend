@@ -83,33 +83,26 @@ app.use('/uploads', express.static('uploads', {
 // ===========================================
 // CONEXIÓN A MONGODB
 // ===========================================
+const mongoose = require("mongoose");
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+    const user = encodeURIComponent(process.env.MONGO_USER);
+    const pass = encodeURIComponent(process.env.MONGO_PASS);
+    const cluster = process.env.MONGO_CLUSTER;
+    const db = process.env.MONGO_DB;
+
+    const uri = `mongodb+srv://${user}:${pass}@${cluster}/${db}?retryWrites=true&w=majority`;
+
+    const conn = await mongoose.connect(uri, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
     });
 
     console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
-    
-    mongoose.connection.on('error', (err) => {
-      console.error('❌ Error en MongoDB:', err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.log('⚠️ MongoDB desconectado');
-    });
-
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      console.log('🔌 MongoDB desconectado por terminación de app');
-      process.exit(0);
-    });
-
   } catch (error) {
-    console.error('❌ Error conectando a MongoDB:', error);
+    console.error("❌ Error conectando a MongoDB:", error);
     process.exit(1);
   }
 };
