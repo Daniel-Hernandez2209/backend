@@ -281,7 +281,7 @@ app.use('*', (req, res) => {
       'POST /api/auth/login',
       'GET /api/products',
       'GET /api/categories',
-      'GET /api/test-db' 
+      'GET /api/test-db'  //prueba para base de datos
     ]
   });
 });
