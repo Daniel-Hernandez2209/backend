@@ -1,5 +1,8 @@
 // index.js
-const app = require("./server");
+const app = require('./server');
+const connectDB = require('./db');
 
-// Exporta la app como serverless function para Vercel
+// Conectar a Mongo una vez antes de exportar
+connectDB();
+
 module.exports = app;

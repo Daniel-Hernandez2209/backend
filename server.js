@@ -83,31 +83,11 @@ app.use('/uploads', express.static('uploads', {
 // ===========================================
 // CONEXIÓN A MONGODB
 // ===========================================
-const mongoose = require("mongoose");
+const connectDB = require("./db");
 
-const connectDB = async () => {
-  try {
-    const user = encodeURIComponent(process.env.MONGO_USER);
-    const pass = encodeURIComponent(process.env.MONGO_PASS);
-    const cluster = process.env.MONGO_CLUSTER;
-    const db = process.env.MONGO_DB;
-
-    const uri = `mongodb+srv://${user}:${pass}@${cluster}/${db}?retryWrites=true&w=majority`;
-
-    const conn = await mongoose.connect(uri, {
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-    });
-
-    console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
-  } catch (error) {
-    console.error("❌ Error conectando a MongoDB:", error);
-    process.exit(1);
-  }
-};
-
+// Conectar a Mongo solo cuando la función se invoque
 connectDB();
+
 
 // ===========================================
 // RUTAS DE LA API
