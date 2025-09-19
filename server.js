@@ -280,7 +280,8 @@ app.use('*', (req, res) => {
       'POST /api/auth/register',
       'POST /api/auth/login',
       'GET /api/products',
-      'GET /api/categories'
+      'GET /api/categories',
+      'GET /api/test-db' 
     ]
   });
 });
