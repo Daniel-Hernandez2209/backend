@@ -199,7 +199,7 @@ const TestSchema = new mongoose.Schema({
 const TestModel = mongoose.models.Test || mongoose.model("Test", TestSchema);
 
 // Endpoint de prueba: inserta y lista
-app.get("/test-db", async (req, res) => {
+app.get("/api/test-db", async (req, res) => {
   try {
     // Insertar documento de prueba
     const doc = await TestModel.create({ name: "Hola Atlas desde Vercel" });
