@@ -1,11 +1,11 @@
 // db.js
 const mongoose = require("mongoose");
 
-let isConnected = null;
+let isConnected = false; // Estado de conexión
 
 const connectDB = async () => {
   if (isConnected) {
-    return; // Ya conectado, reutilizamos
+    return; // Ya conectado, no volvemos a conectar
   }
 
   try {
@@ -22,8 +22,10 @@ const connectDB = async () => {
       socketTimeoutMS: 45000,
     });
 
-    isConnected = conn.connection.readyState;
-    console.log(`✅ MongoDB conectado en ${conn.connection.host}`);
+    isConnected = true;
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`✅ MongoDB conectado en ${conn.connection.host}`);
+    }
   } catch (error) {
     console.error("❌ Error conectando a MongoDB:", error);
     throw error;
