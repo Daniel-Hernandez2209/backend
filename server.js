@@ -188,8 +188,6 @@ app.get('/api/docs', (req, res) => {
 // ===========================================
 // TEST DE CONEXIÓN A MONGO ATLAS
 // ===========================================
-const mongoose = require("mongoose");
-
 // Modelo temporal para pruebas
 const TestSchema = new mongoose.Schema({
   name: String,
