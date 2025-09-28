@@ -18,7 +18,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-app.use(compression());
+app.use(compression()); // compresión gzip
 app.set('trust proxy', true); // necesario si estás detrás de un proxy (ej. Heroku, Vercel)
 
 if (process.env.NODE_ENV === 'development') {
@@ -87,7 +87,7 @@ app.use('/uploads', express.static('uploads', {
 const connectDB = require("./db");
 
 // Conectar a Mongo solo cuando la función se invoque
-connectDB();
+//connectDB();
 
 
 // ===========================================
