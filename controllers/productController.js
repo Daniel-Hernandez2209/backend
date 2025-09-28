@@ -1,11 +1,13 @@
 // controllers/productController.js - Controlador de productos para ATHENA BRAND
 const Product = require('../models/products');
 const { validationResult } = require('express-validator');
+const connectDB = require('../db');
 
 class ProductController {
   // GET /api/products - Obtener todos los productos con paginación y filtros
   static async getAllProducts(req, res) {
     try {
+     await connectDB(); // Asegurar conexión a DB
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 12;
       const skip = (page - 1) * limit;

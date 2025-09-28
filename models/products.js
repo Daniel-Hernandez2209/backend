@@ -1,6 +1,7 @@
 // models/Product.js - Modelo de productos para ATHENA BRAND
 const mongoose = require('mongoose');
 
+
 const productSchema = new mongoose.Schema({
   name: {
     type: String,
