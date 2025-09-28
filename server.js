@@ -19,6 +19,7 @@ app.use(helmet({
 }));
 
 app.use(compression());
+app.set('trust proxy', true); // necesario si estás detrás de un proxy (ej. Heroku, Vercel)
 
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
