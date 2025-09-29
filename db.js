@@ -1,75 +1,85 @@
-// db.js - Conexión optimizada para Vercel/Serverless
+// db.js - Conexión MongoDB con mejor manejo de errores
 const mongoose = require("mongoose");
 
-let cachedConnection = null;
+let isConnected = false;
 
 const connectDB = async () => {
-  // Si ya existe una conexión válida, reutilizarla
-  if (cachedConnection && mongoose.connection.readyState === 1) {
-    console.log("♻️ Usando conexión existente");
-    return cachedConnection;
+  // Si ya está conectado, retornar
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  // Si hay conexión en proceso, esperar
+  if (mongoose.connection.readyState === 2) {
+    console.log("⏳ Conexión en proceso...");
+    await new Promise(resolve => {
+      mongoose.connection.once('connected', resolve);
+    });
+    return;
   }
 
   try {
-    // Construir URI desde variables de entorno
+    // VALIDAR que todas las variables existan
+    const requiredVars = ['MONGO_USER', 'MONGO_PASS', 'MONGO_CLUSTER', 'MONGO_DB'];
+    const missing = requiredVars.filter(varName => !process.env[varName]);
+    
+    if (missing.length > 0) {
+      throw new Error(`❌ Variables de entorno faltantes: ${missing.join(', ')}`);
+    }
+
     const user = encodeURIComponent(process.env.MONGO_USER);
     const pass = encodeURIComponent(process.env.MONGO_PASS);
     const cluster = process.env.MONGO_CLUSTER;
     const db = process.env.MONGO_DB;
 
-    if (!user || !pass || !cluster || !db) {
-      throw new Error("❌ Faltan variables de entorno de MongoDB");
+    // Construir URI
+    const uri = `mongodb+srv://${user}:${pass}@${cluster}/${db}?retryWrites=true&w=majority&appName=Cluster0`;
+
+    // Log para debug (solo en desarrollo)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔍 Intentando conectar a:', cluster);
     }
 
-    const uri = `mongodb+srv://${user}:${pass}@${cluster}/${db}?retryWrites=true&w=majority`;
+    // Desconectar si hay conexión previa en mal estado
+    if (mongoose.connection.readyState > 0 && mongoose.connection.readyState !== 1) {
+      await mongoose.disconnect();
+    }
 
-    // Opciones optimizadas para Vercel/Serverless
-    const options = {
-      maxPoolSize: 10, // Máximo de conexiones en el pool
-      serverSelectionTimeoutMS: 15000, // Timeout para seleccionar servidor
-      socketTimeoutMS: 45000, // Timeout para operaciones
-      family: 4, // Usar IPv4
-      bufferCommands: false, // Desactivar buffering en serverless
-    };
+    // Conectar
+    await mongoose.connect(uri, {
+      maxPoolSize: 5,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
 
-    const conn = await mongoose.connect(uri, options);
-
-    // Cachear la conexión
-    cachedConnection = conn;
-
-    console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
-    console.log(`📦 Base de datos: ${conn.connection.name}`);
-
-    return cachedConnection;
+    isConnected = true;
+    console.log(`✅ MongoDB conectado: ${mongoose.connection.host}`);
+    
   } catch (error) {
-    console.error("❌ Error conectando a MongoDB:", error.message);
-    cachedConnection = null;
+    isConnected = false;
+    console.error("❌ Error MongoDB:", error.message);
+    
+    // Log adicional para debug
+    console.error("Variables disponibles:", {
+      MONGO_USER: process.env.MONGO_USER ? '✓' : '✗',
+      MONGO_PASS: process.env.MONGO_PASS ? '✓' : '✗',
+      MONGO_CLUSTER: process.env.MONGO_CLUSTER ? '✓' : '✗',
+      MONGO_DB: process.env.MONGO_DB ? '✓' : '✗'
+    });
+    
     throw error;
   }
 };
 
-// Manejar eventos de conexión
-mongoose.connection.on("connected", () => {
-  console.log("🔗 Mongoose conectado a MongoDB");
+// Eventos de conexión
+mongoose.connection.on('disconnected', () => {
+  isConnected = false;
+  console.log("🔌 MongoDB desconectado");
 });
 
-mongoose.connection.on("error", (err) => {
-  console.error("❌ Error de conexión Mongoose:", err);
-  cachedConnection = null;
+mongoose.connection.on('error', (err) => {
+  isConnected = false;
+  console.error("❌ Error MongoDB:", err.message);
 });
-
-mongoose.connection.on("disconnected", () => {
-  console.log("🔌 Mongoose desconectado");
-  cachedConnection = null;
-});
-
-// Cerrar conexión al terminar proceso (solo en desarrollo)
-if (process.env.NODE_ENV !== "production") {
-  process.on("SIGINT", async () => {
-    await mongoose.connection.close();
-    console.log("🔌 Conexión cerrada por terminación de app");
-    process.exit(0);
-  });
-}
 
 module.exports = connectDB;
