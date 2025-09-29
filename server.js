@@ -1,4 +1,4 @@
-// server.js - Backend principal con controladores implementados
+// server.js - Backend principal optimizado para Vercel
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -6,6 +6,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const connectDB = require('./db');
 require('dotenv').config();
 
 const app = express();
@@ -18,8 +19,8 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-app.use(compression()); // compresión gzip
-app.set('trust proxy', true); // necesario si estás detrás de un proxy (ej. Heroku, Vercel)
+app.use(compression());
+app.set('trust proxy', 1);
 
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -82,13 +83,22 @@ app.use('/uploads', express.static('uploads', {
 }));
 
 // ===========================================
-// CONEXIÓN A MONGODB
+// ✅ MIDDLEWARE DE CONEXIÓN DB (CRÍTICO PARA VERCEL)
 // ===========================================
-const connectDB = require("./db");
 
-// Conectar a Mongo solo cuando la función se invoque
-//connectDB();
-
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("❌ Error conectando a DB:", error.message);
+    return res.status(503).json({
+      success: false,
+      message: "Error de conexión a base de datos",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
 
 // ===========================================
 // RUTAS DE LA API
@@ -103,7 +113,7 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     environment: process.env.NODE_ENV,
     version: '1.0.0',
-    controllers: 'Implementados'
+    database: mongoose.connection.readyState === 1 ? 'Conectado' : 'Desconectado'
   });
 });
 
@@ -189,7 +199,7 @@ app.get('/api/docs', (req, res) => {
 // ===========================================
 // TEST DE CONEXIÓN A MONGO ATLAS
 // ===========================================
-// Modelo temporal para pruebas
+
 const TestSchema = new mongoose.Schema({
   name: String,
   createdAt: { type: Date, default: Date.now }
@@ -197,7 +207,6 @@ const TestSchema = new mongoose.Schema({
 
 const TestModel = mongoose.models.Test || mongoose.model("Test", TestSchema);
 
-// Endpoint de prueba: inserta y lista
 app.get("/api/test-db", async (req, res) => {
   try {
     // Insertar documento de prueba
@@ -208,17 +217,22 @@ app.get("/api/test-db", async (req, res) => {
 
     res.json({
       success: true,
+      message: "✅ Conexión exitosa a MongoDB",
       inserted: doc,
       lastDocs: docs,
       dbName: mongoose.connection.db.databaseName,
-      host: mongoose.connection.host || "No disponible"
+      host: mongoose.connection.host || "No disponible",
+      readyState: mongoose.connection.readyState
     });
   } catch (error) {
     console.error("❌ Error en /test-db:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
-
 
 // ===========================================
 // MANEJO DE ERRORES
@@ -280,7 +294,7 @@ app.use('*', (req, res) => {
       'POST /api/auth/login',
       'GET /api/products',
       'GET /api/categories',
-      'GET /api/test-db'  //prueba para base de datos
+      'GET /api/test-db'
     ]
   });
 });
