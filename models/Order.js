@@ -20,7 +20,6 @@ const orderSchema = new mongoose.Schema({
   // Número único del pedido
   orderNumber: {
     type: String,
-    required: true,
     unique: true
   },
   
