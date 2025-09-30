@@ -323,7 +323,7 @@ class CategoryController {
   static async getCategoryStats(req, res) {
     try {
       // Esta sería una implementación más completa con datos de productos
-      const Product = require('../models/products');
+      const Product = require('../models/Product');
 
       const stats = await Promise.all(
         CategoryController.athenaCategories

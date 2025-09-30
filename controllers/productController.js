@@ -1,5 +1,5 @@
 // controllers/productController.js - Controlador de productos para ATHENA BRAND
-const Product = require('../models/products');
+const Product = require('../models/Product');
 const { validationResult } = require('express-validator');
 const connectDB = require('../db');
 

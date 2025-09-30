@@ -1,7 +1,7 @@
 // controllers/orderController.js - Controlador de pedidos para ATHENA BRAND
 const { validationResult } = require('express-validator');
 const Order = require('../models/Order');
-const Product = require('../models/products');
+const Product = require('../models/Product');
 const User = require('../models/User');
 const sendEmail = require('../utils/sendEmail');
 

@@ -2,7 +2,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const Product = require('../models/Products');
+const Product = require('../models/Product');
 const User = require('../models/User');
 const slugify = require('slugify');
 
