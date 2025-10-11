@@ -4,8 +4,10 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const adminRoutes = require('./routes/admin');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const logger = require('./utils/logger');
 const connectDB = require('./db');
 require('dotenv').config();
 
@@ -21,6 +23,14 @@ app.use(helmet({
 
 app.use(compression());
 app.set('trust proxy', 1);
+app.use((err, req, res, next) => {
+    logger.error(err, req);
+
+    res.status(err.status || 500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+});
 
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -126,6 +136,7 @@ const categoryRoutes = require('./routes/categories');
 
 // Usar rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/upload', uploadRoutes);

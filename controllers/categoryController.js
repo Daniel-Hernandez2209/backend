@@ -1,4 +1,7 @@
 // controllers/categoryController.js - Controlador de categorías para ATHENA BRAND
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://athenabrand.com';
+const ALLOWED_DOMAINS = ['athenabrand.com', 'www.athenabrand.com'];
+const { adminAuth } = require('../middleware/auth');
 
 class CategoryController {
   // Categorías fijas de ATHENA BRAND con información adicional
@@ -125,7 +128,23 @@ class CategoryController {
   // GET /api/categories/menu - Obtener categorías para el menú (simplificado)
   static async getMenuCategories(req, res) {
     try {
-      const menuCategories = CategoryController.athenaCategories
+
+              // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
+
+    const menuCategories = CategoryController.athenaCategories
         .filter(cat => cat.isActive)
         .sort((a, b) => a.order - b.order)
         .map(cat => ({
@@ -148,14 +167,56 @@ class CategoryController {
     }
   }
 
+  
+ static validateDomain(url) { // Validar dominios permitidos
+  try {
+    const { hostname } = new URL(url);
+    return ALLOWED_DOMAINS.includes(hostname);
+  } catch {
+    return false;
+  }
+ }
+
+ // Función de validación de slug
+static validateSlug(slug) {
+  // Solo letras, números, guiones y guiones bajos
+  const slugRegex = /^[a-zA-Z0-9-_]+$/;
+  return slugRegex.test(slug) && slug.length <= 50;
+}
+
+// Middleware de validación
+static validateSlugParam(req, res, next) {
+  const { slug } = req.params;
+  
+  if (!slug || !CategoryController.validateSlug(slug)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Slug inválido'
+    });
+  }
+  next();
+}
+
+
   // GET /api/categories/:slug - Obtener categoría específica
   static async getCategoryBySlug(req, res) {
     try {
       const { slug } = req.params;
-      
-      const category = CategoryController.athenaCategories.find(cat => 
-        cat.slug === slug && cat.isActive
-      );
+          // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+     const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
+
 
       if (!category) {
         return res.status(404).json({
@@ -182,10 +243,21 @@ class CategoryController {
   static async getSubcategories(req, res) {
     try {
       const { slug } = req.params;
-      
-      const category = CategoryController.athenaCategories.find(cat => 
-        cat.slug === slug && cat.isActive
-      );
+
+    // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
 
       if (!category) {
         return res.status(404).json({
@@ -217,6 +289,31 @@ class CategoryController {
   // GET /api/categories/admin/all - Obtener todas las categorías para admin
   static async getAllCategoriesAdmin(req, res) {
     try {
+
+      adminAuth(req, res, async () => {
+        if (!req.isAdmin) {
+          return res.status(403).json({
+            success: false,
+            message: 'Acceso denegado'
+          }); 
+      }
+    });
+
+
+    // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
       res.json({
         success: true,
         data: CategoryController.athenaCategories.sort((a, b) => a.order - b.order),
@@ -235,6 +332,22 @@ class CategoryController {
   // GET /api/categories/sitemap - Para generar sitemap
   static async getSitemapData(req, res) {
     try {
+
+     // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
+    // Construir datos para sitemap
       const sitemapData = CategoryController.athenaCategories
         .filter(cat => cat.isActive)
         .map(cat => ({
@@ -270,10 +383,22 @@ class CategoryController {
   static async getCategorySEO(req, res) {
     try {
       const { slug } = req.params;
+
+              // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
       
-      const category = CategoryController.athenaCategories.find(cat => 
-        cat.slug === slug && cat.isActive
-      );
 
       if (!category) {
         return res.status(404).json({
@@ -281,12 +406,13 @@ class CategoryController {
           message: 'Categoría no encontrada'
         });
       }
+      
 
       const seoData = {
         title: category.seoTitle || `${category.name} - ATHENA BRAND`,
         description: category.seoDescription || category.description,
         keywords: category.keywords || [],
-        canonical: `${process.env.FRONTEND_URL}/categoria/${category.slug}`,
+        canonical: this.validateDomain(FRONTEND_URL) ? `${FRONTEND_URL}/categoria/${category.slug}` : null,
         ogTitle: category.seoTitle || `${category.name} - ATHENA BRAND`,
         ogDescription: category.seoDescription || category.description,
         ogImage: category.image,
@@ -322,25 +448,44 @@ class CategoryController {
   // GET /api/categories/stats - Estadísticas de categorías
   static async getCategoryStats(req, res) {
     try {
+
+    // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
+
       // Esta sería una implementación más completa con datos de productos
       const Product = require('../models/Product');
+    
+    const stats = await Promise.all(
+      CategoryController.athenaCategories
+        .filter(cat => cat.isActive)
+        .map(async (category) => {
+          // Sanitizar parámetro
+          const sanitizedSlug = category.slug.replace(/[\$\.]/g, '');
+          
+          const productCount = await Product.countDocuments({
+            category: { $eq: sanitizedSlug }, // Uso explícito de $eq
+            isActive: { $eq: true }
+          });
 
-      const stats = await Promise.all(
-        CategoryController.athenaCategories
-          .filter(cat => cat.isActive)
-          .map(async (category) => {
-            const productCount = await Product.countDocuments({
-              category: category.slug,
-              isActive: true
-            });
-
-            const avgPrice = await Product.aggregate([
-              { 
-                $match: { 
-                  category: category.slug, 
-                  isActive: true 
-                } 
-              },
+          const avgPrice = await Product.aggregate([
+            { 
+              $match: { 
+                category: { $eq: sanitizedSlug },
+                isActive: { $eq: true }
+              } 
+            },,
               {
                 $group: {
                   _id: null,
@@ -381,7 +526,32 @@ class CategoryController {
   static async toggleCategory(req, res) {
     try {
       const { slug } = req.params;
-      
+
+      adminAuth(req, res, async () => {
+        if (!req.isAdmin) {
+          return res.status(403).json({
+            success: false,
+            message: 'Acceso denegado'
+          }); 
+      }
+    });
+
+
+    // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
+    // Encontrar índice de la categoría
       const categoryIndex = CategoryController.athenaCategories.findIndex(cat => 
         cat.slug === slug
       );

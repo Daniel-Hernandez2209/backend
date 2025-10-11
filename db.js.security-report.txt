@@ -1,0 +1,206 @@
+## Análisis de Vulnerabilidades de Ciberseguridad
+
+### ✅ **Aspectos Positivos**
+- Uso correcto de `encodeURIComponent()` para escapar credenciales
+- Validación de variables de entorno requeridas
+- Manejo adecuado de errores
+- No exposición directa de credenciales en logs
+
+### 🚨 **Vulnerabilidades Encontradas**
+
+#### 1. **EXPOSICIÓN DE DATOS SENSIBLES** - Líneas 55-60
+**Problema**: Los logs de debug pueden exponer información sobre la estructura de credenciales.
+
+```js
+// VULNERABLE - Líneas 55-60
+console.error("Variables disponibles:", {
+  MONGO_USER: process.env.MONGO_USER ? '✓' : '✗',
+  MONGO_PASS: process.env.MONGO_PASS ? '✓' : '✗',
+  MONGO_CLUSTER: process.env.MONGO_CLUSTER ? '✓' : '✗',
+  MONGO_DB: process.env.MONGO_DB ? '✓' : '✗'
+});
+```
+
+**Corrección**:
+```js
+// SEGURO - Solo en desarrollo y sin detalles específicos
+if (process.env.NODE_ENV === 'development') {
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  if (missingVars.length > 0) {
+    console.error("Variables de entorno faltantes para desarrollo");
+  }
+}
+```
+
+#### 2. **INFORMACIÓN SENSIBLE EN LOGS** - Línea 48
+**Problema**: El hostname puede revelar información sobre la infraestructura.
+
+```js
+// VULNERABLE - Línea 48
+console.log(`✅ MongoDB conectado: ${mongoose.connection.host}`);
+```
+
+**Corrección**:
+```js
+// SEGURO - Sin exponer detalles del host
+console.log("✅ MongoDB conectado exitosamente");
+```
+
+#### 3. **FALTA DE VALIDACIÓN DE ENTRADA** - Líneas 29-32
+**Problema**: No se valida el formato/contenido de las variables de entorno.
+
+```js
+// VULNERABLE - Sin validación de formato
+const user = encodeURIComponent(process.env.MONGO_USER);
+const pass = encodeURIComponent(process.env.MONGO_PASS);
+const cluster = process.env.MONGO_CLUSTER;
+const db = process.env.MONGO_DB;
+```
+
+**Corrección**:
+```js
+// SEGURO - Con validaciones
+const validateEnvVar = (value, name, pattern = null) => {
+  if (!value || value.trim().length === 0) {
+    throw new Error(`Variable ${name} está vacía`);
+  }
+  if (pattern && !pattern.test(value)) {
+    throw new Error(`Variable ${name} tiene formato inválido`);
+  }
+  return value.trim();
+};
+
+const user = encodeURIComponent(validateEnvVar(
+  process.env.MONGO_USER, 
+  'MONGO_USER',
+  /^[a-zA-Z0-9_-]+$/ // Solo alfanumérico, guiones y underscore
+));
+
+const pass = encodeURIComponent(validateEnvVar(process.env.MONGO_PASS, 'MONGO_PASS'));
+
+const cluster = validateEnvVar(
+  process.env.MONGO_CLUSTER, 
+  'MONGO_CLUSTER',
+  /^[a-zA-Z0-9.-]+$/ // Formato típico de cluster
+);
+
+const db = validateEnvVar(
+  process.env.MONGO_DB, 
+  'MONGO_DB',
+  /^[a-zA-Z0-9_-]+$/ // Nombre de DB válido
+);
+```
+
+### 🔒 **Código Completo Corregido**
+
+```js
+// db.js - Conexión MongoDB segura
+const mongoose = require("mongoose");
+
+let isConnected = false;
+
+// Función de validación segura
+const validateEnvVar = (value, name, pattern = null) => {
+  if (!value || value.trim().length === 0) {
+    throw new Error(`Variable ${name} requerida`);
+  }
+  if (pattern && !pattern.test(value.trim())) {
+    throw new Error(`Variable ${name} tiene formato inválido`);
+  }
+  return value.trim();
+};
+
+const connectDB = async () => {
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  if (mongoose.connection.readyState === 2) {
+    console.log("⏳ Conexión en proceso...");
+    await new Promise(resolve => {
+      mongoose.connection.once('connected', resolve);
+    });
+    return;
+  }
+
+  try {
+    // VALIDAR que todas las variables existan
+    const requiredVars = ['MONGO_USER', 'MONGO_PASS', 'MONGO_CLUSTER', 'MONGO_DB'];
+    const missing = requiredVars.filter(varName => !process.env[varName]);
+    
+    if (missing.length > 0) {
+      throw new Error("❌ Variables de entorno faltantes para la conexión");
+    }
+
+    // Validar y sanitizar variables con patrones seguros
+    const user = encodeURIComponent(validateEnvVar(
+      process.env.MONGO_USER, 
+      'MONGO_USER',
+      /^[a-zA-Z0-9_-]+$/
+    ));
+
+    const pass = encodeURIComponent(validateEnvVar(
+      process.env.MONGO_PASS, 
+      'MONGO_PASS'
+    ));
+
+    const cluster = validateEnvVar(
+      process.env.MONGO_CLUSTER, 
+      'MONGO_CLUSTER',
+      /^[a-zA-Z0-9.-]+$/
+    );
+
+    const db = validateEnvVar(
+      process.env.MONGO_DB, 
+      'MONGO_DB',
+      /^[a-zA-Z0-9_-]+$/
+    );
+
+    // Construir URI
+    const uri = `mongodb+srv://${user}:${pass}@${cluster}/${db}?retryWrites=true&w=majority&appName=Cluster0`;
+
+    // Log seguro para desarrollo
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Intentando conectar a MongoDB...');
+    }
+
+    // Desconectar si hay conexión previa en mal estado
+    if (mongoose.connection.readyState > 0 && mongoose.connection.readyState !== 1) {
+      await mongoose.disconnect();
+    }
+
+    // Conectar con configuración segura
+    await mongoose.connect(uri, {
+      maxPoolSize: 5,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      // Configuraciones adicionales de seguridad
+      authSource: 'admin',
+      ssl: true
+    });
+
+    isConnected = true;
+    console.log("✅ MongoDB conectado exitosamente");
+    
+  } catch (error) {
+    isConnected = false;
+    console.error("❌ Error de conexión a MongoDB");
+    
+    // Solo en desarrollo mostrar más detalles (sin datos sensibles)
+    if (process.env.NODE_ENV === 'development') {
+      console.error("Tipo de error:", error.name);
+    }
+    
+    throw new Error("Error de conexión a la base de datos");
+  }
+};
+
+// Eventos de conexión
+mongoose.connection.on('disconnected', () => {
+  isConnected = false;
+  console.log("🔌 MongoDB desconectado");
+});
+
+mongoose.connection.on('error', (err) => {
+  isConnected = false;
+  console.error("❌ Error en conexión MongoDB");

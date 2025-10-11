@@ -1,0 +1,235 @@
+## Análisis de Vulnerabilidades de Ciberseguridad
+
+He identificado varias vulnerabilidades importantes en tu modelo de productos de Node.js/Mongoose:
+
+### 🚨 **VULNERABILIDADES CRÍTICAS**
+
+#### 1. **Inyección NoSQL** (Líneas 127-138)
+**Problema**: El método `searchProducts` es vulnerable a inyección NoSQL.
+```js
+// VULNERABLE - Línea 127-138
+productSchema.statics.searchProducts = function(query, category = null, limit = 20) {
+  const searchCriteria = {
+    isActive: true,
+    $text: { $search: query }  // ⚠️ Sin validación
+  };
+  
+  if (category) {
+    searchCriteria.category = category;  // ⚠️ Sin validación
+  }
+```
+
+**Corrección:**
+```js
+const validator = require('validator');
+
+productSchema.statics.searchProducts = function(query, category = null, limit = 20) {
+  // Validar y sanitizar entradas
+  if (!query || typeof query !== 'string') {
+    throw new Error('Query debe ser un string válido');
+  }
+  
+  // Sanitizar query para prevenir inyección
+  const sanitizedQuery = validator.escape(query.trim());
+  
+  const searchCriteria = {
+    isActive: true,
+    $text: { $search: sanitizedQuery }
+  };
+  
+  // Validar categoría contra enum permitido
+  const allowedCategories = ['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'];
+  if (category) {
+    if (!allowedCategories.includes(category)) {
+      throw new Error('Categoría no válida');
+    }
+    searchCriteria.category = category;
+  }
+  
+  // Validar y limitar el parámetro limit
+  const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+  
+  return this.find(searchCriteria)
+    .limit(safeLimit)
+    .sort({ score: { $meta: 'textScore' } });
+};
+```
+
+#### 2. **Falta de Validación de URLs** (Líneas 38-46 y 90)
+**Problema**: Las URLs de imágenes no se validan, permitiendo XSS y ataques de redirección.
+
+```js
+// VULNERABLE - Líneas 38-46
+images: [{
+  url: {
+    type: String,
+    required: true  // ⚠️ Sin validación de URL
+  },
+```
+
+**Corrección:**
+```js
+const validator = require('validator');
+
+images: [{
+  url: {
+    type: String,
+    required: true,
+    validate: {
+      validator: function(v) {
+        return validator.isURL(v, {
+          protocols: ['http', 'https'],
+          require_protocol: true,
+          host_whitelist: ['your-cdn-domain.com', 'trusted-images.com']
+        });
+      },
+      message: 'URL de imagen no válida o no permitida'
+    }
+  },
+  alt: {
+    type: String,
+    default: '',
+    validate: {
+      validator: function(v) {
+        return !v || validator.isLength(v, { max: 200 });
+      },
+      message: 'Texto alternativo demasiado largo'
+    }
+  }
+}],
+
+colors: [{
+  name: {
+    type: String,
+    validate: {
+      validator: function(v) {
+        return !v || validator.isLength(validator.escape(v), { max: 50 });
+      },
+      message: 'Nombre de color inválido'
+    }
+  },
+  hex: {
+    type: String,
+    validate: {
+      validator: function(v) {
+        return !v || /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(v);
+      },
+      message: 'Código hexadecimal de color inválido'
+    }
+  },
+  image: {
+    type: String,
+    validate: {
+      validator: function(v) {
+        return !v || validator.isURL(v, {
+          protocols: ['http', 'https'],
+          require_protocol: true,
+          host_whitelist: ['your-cdn-domain.com']
+        });
+      },
+      message: 'URL de imagen de color no válida'
+    }
+  }
+}],
+```
+
+#### 3. **Inyección de Comandos en Generación de Slug** (Líneas 114-121)
+**Problema**: El slug se genera sin sanitización adecuada.
+
+```js
+// VULNERABLE - Líneas 114-121
+productSchema.pre('save', function(next) {
+  if (this.isModified('name') && !this.slug) {
+    this.slug = this.name
+      .toLowerCase()
+      .replace(/[^a-zA-Z0-9\s]/g, '')  // ⚠️ Sanitización insuficiente
+      .replace(/\s+/g, '-');
+  }
+  next();
+});
+```
+
+**Corrección:**
+```js
+const slugify = require('slugify');
+
+productSchema.pre('save', function(next) {
+  if (this.isModified('name') && !this.slug) {
+    // Usar librería especializada y validar entrada
+    if (!this.name || typeof this.name !== 'string') {
+      return next(new Error('Nombre de producto inválido'));
+    }
+    
+    this.slug = slugify(this.name, {
+      lower: true,
+      strict: true, // Elimina caracteres especiales
+      remove: /[*+~.()'"!:@]/g // Elimina caracteres peligrosos
+    });
+    
+    // Validar que el slug generado sea válido
+    if (!this.slug || this.slug.length < 1) {
+      return next(new Error('No se pudo generar un slug válido'));
+    }
+  }
+  next();
+});
+```
+
+#### 4. **Validación Insuficiente en Campos de Texto** (Múltiples líneas)
+**Problema**: Campos como `tags`, `material`, etc. no tienen validación XSS.
+
+**Corrección:**
+```js
+const validator = require('validator');
+
+// Añadir validaciones sanitizadas
+tags: [{
+  type: String,
+  validate: {
+    validator: function(v) {
+      return validator.isLength(validator.escape(v), { max: 50 });
+    },
+    message: 'Tag inválido'
+  }
+}],
+
+material: {
+  type: String,
+  default: '',
+  validate: {
+    validator: function(v) {
+      return !v || validator.isLength(validator.escape(v), { max: 200 });
+    },
+    message: 'Material inválido'
+  }
+},
+
+metaTitle: {
+  type: String,
+  validate: {
+    validator: function(v) {
+      return !v || validator.isLength(validator.escape(v), { max: 60 });
+    },
+    message: 'Meta título inválido'
+  }
+},
+
+metaDescription: {
+  type: String,
+  validate: {
+    validator: function(v) {
+      return !v || validator.isLength(validator.escape(v), { max: 160 });
+    },
+    message: 'Meta descripción inválida'
+  }
+}
+```
+
+#### 5. **Falta de Rate Limiting y Validación** (Línea 150)
+**Problema**: El método `decrementStock` no tiene protección contra race conditions.
+
+**Corrección:**
+```js
+productSchema.methods.decrementStock = async function(size, quantity) {
+  // Validar entradas
+  

@@ -1,0 +1,175 @@
+# Controlador de Autenticación - authController.js
+
+**Descripción General del Archivo:**
+Este archivo implementa un controlador de autenticación completo para la aplicación ATHENA BRAND. Maneja todas las operaciones relacionadas con usuarios: registro, login, verificación de email, recuperación de contraseñas, gestión de perfil y seguridad básica contra ataques de fuerza bruta. Utiliza JWT para autenticación, bcrypt para hash de contraseñas y incluye funcionalidades de envío de emails para verificación y recuperación.
+
+```javascript
+// controllers/authController.js - Controlador de autenticación para ATHENA BRAND
+const jwt = require('jsonwebtoken'); // Librería para manejo de JSON Web Tokens
+const { validationResult } = require('express-validator'); // Para obtener resultados de validación de middleware
+const User = require('../models/User'); // Modelo de usuario de la base de datos
+const sendEmail = require('../utils/sendEmail'); // Utilidad para envío de emails
+
+// Función para generar JWT - Crea tokens de sesión para usuarios autenticados
+const generateToken = (userId) => {
+  return jwt.sign(
+    { userId }, // Payload del token con ID del usuario
+    process.env.JWT_SECRET, // Clave secreta desde variables de entorno
+    {
+      expiresIn: process.env.JWT_EXPIRE || '7d', // Tiempo de expiración (por defecto 7 días)
+    }
+  );
+};
+
+// Función para crear respuesta de usuario limpia - Elimina campos sensibles antes de enviar respuesta
+const createUserResponse = (user) => {
+  const userResponse = user.toObject(); // Convierte documento Mongoose a objeto JS plano
+  delete userResponse.password; // Elimina hash de contraseña
+  delete userResponse.loginAttempts; // Elimina contador de intentos fallidos
+  delete userResponse.lockUntil; // Elimina timestamp de bloqueo
+  delete userResponse.verificationToken; // Elimina token de verificación de email
+  delete userResponse.verificationTokenExpires; // Elimina expiración de token de verificación
+  delete userResponse.passwordResetToken; // Elimina token de reset de contraseña
+  delete userResponse.passwordResetExpires; // Elimina expiración de token de reset
+  return userResponse; // Retorna objeto limpio sin datos sensibles
+};
+
+class AuthController {
+  // POST /api/auth/register - Registro de usuario
+  static async register(req, res) {
+    try {
+      // Verificar errores de validación - Revisa si los datos del request pasaron las validaciones
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) { // Si hay errores de validación
+        return res.status(400).json({
+          success: false,
+          message: 'Datos de registro inválidos',
+          errors: errors.array() // Retorna array con detalles de errores
+        });
+      }
+
+      // Destructuring de datos del body - Extrae campos necesarios del request
+      const { email, password, firstName, lastName, phone, address } = req.body;
+
+      // Verificar si el usuario ya existe - Previene registros duplicados
+      const existingUser = await User.findByEmail(email);
+      if (existingUser) { // Si ya existe un usuario con ese email
+        return res.status(400).json({
+          success: false,
+          message: 'Ya existe una cuenta con este email'
+        });
+      }
+
+      // Crear nuevo usuario - Instancia nuevo documento de usuario
+      const user = new User({
+        email,
+        password, // Se hasheará automáticamente en el modelo
+        firstName,
+        lastName,
+        phone,
+        address
+      });
+
+      // Generar token de verificación - Para confirmar email del usuario
+      const verificationToken = user.generateVerificationToken();
+      
+      await user.save(); // Guardar usuario en base de datos
+
+      // Enviar email de verificación - Proceso de confirmación de cuenta
+      try {
+        await sendEmail({
+          to: user.email, // Destinatario
+          subject: 'Verificar cuenta - ATHENA BRAND', // Asunto del email
+          template: 'verification', // Template de email a usar
+          data: { // Datos para el template
+            firstName: user.firstName,
+            verificationToken,
+            verificationUrl: `${process.env.FRONTEND_URL}/verificar-cuenta?token=${verificationToken}`
+          }
+        });
+      } catch (emailError) {
+        console.error('Error enviando email de verificación:', emailError);
+        // No fallar el registro si el email falla - El registro continúa aunque falle el email
+      }
+
+      // Generar JWT - Token de sesión para login automático tras registro
+      const token = generateToken(user._id);
+
+      // Respuesta sin datos sensibles - Usuario limpio para enviar al cliente
+      const userResponse = createUserResponse(user);
+
+      // Respuesta exitosa con token y datos de usuario
+      res.status(201).json({
+        success: true,
+        message: 'Usuario registrado exitosamente. Revisa tu email para verificar tu cuenta.',
+        token, // JWT para autenticación inmediata
+        user: userResponse // Datos de usuario sin campos sensibles
+      });
+
+    } catch (error) {
+      console.error('Error en registro:', error); // Log del error para debugging
+      res.status(500).json({
+        success: false,
+        message: 'Error interno del servidor',
+        error: process.env.NODE_ENV === 'development' ? error.message : {} // Solo mostrar error en desarrollo
+      });
+    }
+  }
+
+  // POST /api/auth/login - Login de usuario
+  static async login(req, res) {
+    try {
+      // Verificar errores de validación - Valida formato de email y contraseña
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Datos de login inválidos',
+          errors: errors.array()
+        });
+      }
+
+      const { email, password } = req.body; // Extraer credenciales del request
+
+      // Buscar usuario con contraseña - select('+password') incluye campo password que normalmente está oculto
+      const user = await User.findOne({ email }).select('+password');
+      
+      if (!user) { // Si no existe usuario con ese email
+        return res.status(401).json({
+          success: false,
+          message: 'Credenciales inválidas' // Mensaje genérico por seguridad
+        });
+      }
+
+      // Verificar si la cuenta está bloqueada - Protección contra ataques de fuerza bruta
+      if (user.isLocked) { // Propiedad virtual que verifica si está bloqueado
+        return res.status(423).json({ // 423 = Locked
+          success: false,
+          message: 'Cuenta temporalmente bloqueada debido a múltiples intentos de login fallidos'
+        });
+      }
+
+      // Verificar contraseña - Compara hash almacenado con contraseña proporcionada
+      const isPasswordValid = await user.comparePassword(password);
+      
+      if (!isPasswordValid) { // Si la contraseña es incorrecta
+        // Incrementar intentos fallidos - Sistema de seguridad contra ataques
+        await user.incrementLoginAttempts();
+        
+        return res.status(401).json({
+          success: false,
+          message: 'Credenciales inválidas' // Mismo mensaje por seguridad
+        });
+      }
+
+      // Verificar si la cuenta está activa - Control de estado de cuenta
+      if (!user.isActive) {
+        return res.status(423).json({
+          success: false,
+          message: 'Cuenta desactivada. Contacta al soporte.'
+        });
+      }
+
+      // Login exitoso - resetear intentos fallidos
+      if (user.loginAttempts > 0) {
+        await user

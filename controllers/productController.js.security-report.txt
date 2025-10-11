@@ -1,0 +1,225 @@
+## Análisis de Vulnerabilidades de Ciberseguridad
+
+He encontrado **múltiples vulnerabilidades críticas** en este controlador. Aquí está el análisis detallado:
+
+---
+
+### 🔴 **1. INYECCIÓN NoSQL (CRÍTICA)**
+
+**Líneas afectadas:** 25-26, 125, 130, 132, 158, 172, 454, 456, 458
+
+**Vulnerabilidad:**
+```js
+// VULNERABLE - Inyección directa en consultas MongoDB
+filters.category = req.query.category;
+filters.subcategory = req.query.subcategory;
+filters.price.$gte = parseFloat(req.query.minPrice);
+```
+
+**Corrección:**
+```js
+// SEGURO - Validación y sanitización
+const { body, query, param } = require('express-validator');
+
+// Middleware de validación
+const validateCategory = [
+  query('category').optional().isIn(['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas']),
+  query('subcategory').optional().isLength({ min: 1, max: 50 }).matches(/^[a-zA-Z0-9\s\-_]+$/),
+  query('minPrice').optional().isFloat({ min: 0 }).toFloat(),
+  query('maxPrice').optional().isFloat({ min: 0 }).toFloat(),
+];
+
+// En el controlador
+if (req.query.category) {
+  const sanitizedCategory = validator.escape(req.query.category);
+  if (validCategories.includes(sanitizedCategory)) {
+    filters.category = sanitizedCategory;
+  }
+}
+```
+
+---
+
+### 🔴 **2. INYECCIÓN DE EXPRESIONES REGULARES (CRÍTICA)**
+
+**Líneas afectadas:** 119-125, 455-459
+
+**Vulnerabilidad:**
+```js
+// VULNERABLE - ReDoS (Regular Expression Denial of Service)
+$or: [
+  { name: { $regex: query, $options: 'i' } },
+  { description: { $regex: query, $options: 'i' } },
+  { tags: { $in: [new RegExp(query, 'i')] } }
+]
+```
+
+**Corrección:**
+```js
+const escapeRegex = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+// SEGURO
+const sanitizedQuery = escapeRegex(query.trim());
+const searchCriteria = {
+  isActive: true,
+  $or: [
+    { name: { $regex: sanitizedQuery, $options: 'i' } },
+    { description: { $regex: sanitizedQuery, $options: 'i' } },
+    { tags: { $in: [new RegExp(sanitizedQuery, 'i')] } }
+  ]
+};
+```
+
+---
+
+### 🔴 **3. EXPOSICIÓN DE DATOS SENSIBLES (ALTA)**
+
+**Líneas afectadas:** 95-97, 140-142, 205-207, 283-285
+
+**Vulnerabilidad:**
+```js
+// VULNERABLE - Exposición de stack traces y detalles del error
+error: process.env.NODE_ENV === 'development' ? error.message : {}
+```
+
+**Corrección:**
+```js
+// SEGURO - Logger apropiado y respuestas genéricas
+const logger = require('../utils/logger');
+
+try {
+  // ... código
+} catch (error) {
+  logger.error('Error obteniendo productos:', {
+    error: error.message,
+    stack: error.stack,
+    userId: req.user?.id,
+    ip: req.ip
+  });
+  
+  res.status(500).json({
+    success: false,
+    message: 'Error interno del servidor',
+    errorCode: 'PRODUCTS_FETCH_ERROR'
+  });
+}
+```
+
+---
+
+### 🟡 **4. FALTA DE VALIDACIONES DE ENTRADA (MEDIA)**
+
+**Líneas afectadas:** 11-12, 23-24, 148-149
+
+**Vulnerabilidad:**
+```js
+// VULNERABLE - Sin límites ni validación
+const page = parseInt(req.query.page) || 1;
+const limit = parseInt(req.query.limit) || 12;
+```
+
+**Corrección:**
+```js
+// SEGURO - Validación con límites
+const validatePagination = [
+  query('page').optional().isInt({ min: 1, max: 1000 }).toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+];
+
+const page = Math.max(1, Math.min(1000, parseInt(req.query.page) || 1));
+const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 12));
+```
+
+---
+
+### 🟡 **5. INYECCIÓN EN OPERACIONES DE ORDENAMIENTO (MEDIA)**
+
+**Líneas afectadas:** 40-59, 176-190
+
+**Vulnerabilidad:**
+```js
+// VULNERABLE - Ordenamiento sin validación
+switch (req.query.sort) {
+  case 'price_asc':
+    sortBy = { price: 1 };
+    break;
+  // ...
+  default:
+    sortBy = { createdAt: -1 };
+}
+```
+
+**Corrección:**
+```js
+// SEGURO - Lista blanca de campos permitidos
+const ALLOWED_SORT_FIELDS = {
+  'price_asc': { price: 1 },
+  'price_desc': { price: -1 },
+  'newest': { createdAt: -1 },
+  'popular': { sales: -1, views: -1 },
+  'name_asc': { name: 1 },
+  'name_desc': { name: -1 }
+};
+
+const sortBy = ALLOWED_SORT_FIELDS[req.query.sort] || { createdAt: -1 };
+```
+
+---
+
+### 🟡 **6. FALTA DE RATE LIMITING (MEDIA)**
+
+**Vulnerabilidad:** No hay protección contra ataques de fuerza bruta o DoS
+
+**Corrección:**
+```js
+const rateLimit = require('express-rate-limit');
+
+const productSearchLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // máximo 100 requests por ventana de tiempo
+  message: {
+    success: false,
+    message: 'Demasiadas consultas, intenta más tarde'
+  }
+});
+
+// Aplicar a rutas de búsqueda
+router.get('/search', productSearchLimit, ProductController.searchProducts);
+```
+
+---
+
+### 🟡 **7. VALIDACIÓN INSUFICIENTE DE SLUG (MEDIA)**
+
+**Líneas afectadas:** 315, 373
+
+**Vulnerabilidad:**
+```js
+// VULNERABLE - Generación de slug sin validación
+productData.slug = productData.name
+  .toLowerCase()
+  .replace(/[^a-zA-Z0-9\s]/g, '')
+  .replace(/\s+/g, '-');
+```
+
+**Corrección:**
+```js
+const generateSlug = (name) => {
+  if (!name || typeof name !== 'string') {
+    throw new Error('Nombre inválido para generar slug');
+  }
+  
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 100) // Limitar longitud
+    .replace(/^-+|-+$/g, ''); // Remover guiones al inicio/final
+};
+
+// Validar unicidad
+const existingProduct = await Product.findOne({ slug: generatedSlug });
+if (existingProduct)

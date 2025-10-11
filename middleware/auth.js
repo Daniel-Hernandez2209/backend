@@ -2,17 +2,35 @@
 // middleware/auth.js - Middleware de autenticación
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const mongoose = require('mongoose');
+const rateLimit = require('express-rate-limit');
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // máximo 100 intentos por IP
+  message: 'Demasiados intentos de autenticación'
+});
+
+
 
 // Middleware de autenticación básico
 const auth = async (req, res, next) => {
   try {
-    let token = req.header('Authorization');
+    
+    let token = req.headers.authorization || req.header('Authorization');
 
     // Verificar si existe el token
     if (!token) {
       return res.status(401).json({
         success: false,
         message: 'Acceso denegado. Token no proporcionado.'
+      });
+    }
+    // Validar formato básico del token
+    if (!token || typeof token !== 'string' || token.length < 10) {
+      return res.status(401).json({
+        success: false,
+        message: 'Formato de token inválido.'
       });
     }
 
@@ -22,10 +40,23 @@ const auth = async (req, res, next) => {
     }
 
     // Verificar token
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET no está configurado');
+    }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+        
     // Buscar usuario
+    // Validar que userId es un string válido de ObjectId
+      if (!decoded.userId || typeof decoded.userId !== 'string') {
+        throw new Error('Invalid userId format');
+      }
+
+    if (!mongoose.Types.ObjectId.isValid(decoded.userId)) {
+      throw new Error('Invalid ObjectId format');
+    }
+
     const user = await User.findById(decoded.userId);
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -61,7 +92,12 @@ const auth = async (req, res, next) => {
       });
     }
 
-    console.error('Error en middleware auth:', error);
+    console.error('Error en middleware auth:', {
+      name: error.name,
+      message: error.message,
+      userId: req.userId || 'unknown',
+      timestamp: new Date().toISOString()
+    });
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor.'
@@ -73,12 +109,12 @@ const auth = async (req, res, next) => {
 const adminAuth = async (req, res, next) => {
   try {
     // Primero ejecutar auth básico
-    await new Promise((resolve, reject) => {
-      auth(req, res, (err) => {
-        if (err) reject(err);
-        else resolve();
+  if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Autenticación requerida.'
       });
-    });
+    }
 
     // Verificar si es admin
     if (req.user.role !== 'admin') {
@@ -89,6 +125,7 @@ const adminAuth = async (req, res, next) => {
     }
 
     next();
+
 
   } catch (error) {
     console.error('Error en middleware adminAuth:', error);

@@ -19,3 +19,6 @@ router.get('/admin/all', adminAuth, CategoryController.getAllCategoriesAdmin);
 router.put('/:slug/toggle', adminAuth, CategoryController.toggleCategory);
 
 module.exports = router;
+
+
+

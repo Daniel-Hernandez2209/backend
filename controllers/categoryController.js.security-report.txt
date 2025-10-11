@@ -1,0 +1,212 @@
+## Análisis de Vulnerabilidades de Seguridad
+
+Después de analizar el código, he identificado varias vulnerabilidades importantes:
+
+### 🔴 **CRÍTICAS**
+
+#### 1. **Exposición de Variables de Entorno** (Líneas 257, 260, 268, 273)
+**Problema**: Las variables `process.env.FRONTEND_URL` se exponen directamente al cliente sin validación.
+
+**Riesgo**: Exposición de información sensible del servidor.
+
+**Corrección**:
+```js
+// Configuración segura al inicio del archivo
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://athenabrand.com';
+const ALLOWED_DOMAINS = ['athenabrand.com', 'www.athenabrand.com'];
+
+// Función de validación
+static validateDomain(url) {
+  try {
+    const urlObj = new URL(url);
+    return ALLOWED_DOMAINS.includes(urlObj.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// En el método getCategorySEO (línea 257)
+canonical: this.validateDomain(FRONTEND_URL) ? `${FRONTEND_URL}/categoria/${category.slug}` : null,
+```
+
+#### 2. **Falta de Validación de Entrada** (Líneas 98, 134, 167, 232, 327)
+**Problema**: Los parámetros `slug` no se validan contra caracteres maliciosos.
+
+**Riesgo**: Posibles ataques de inyección y XSS reflejado.
+
+**Corrección**:
+```js
+// Función de validación de slug
+static validateSlug(slug) {
+  // Solo letras, números, guiones y guiones bajos
+  const slugRegex = /^[a-zA-Z0-9-_]+$/;
+  return slugRegex.test(slug) && slug.length <= 50;
+}
+
+// Middleware de validación
+static validateSlugParam(req, res, next) {
+  const { slug } = req.params;
+  
+  if (!slug || !CategoryController.validateSlug(slug)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Slug inválido'
+    });
+  }
+  next();
+}
+
+// Aplicar en cada método (ejemplo línea 98):
+static async getCategoryBySlug(req, res) {
+  try {
+    const { slug } = req.params;
+    
+    // Validación de entrada
+    if (!CategoryController.validateSlug(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Formato de categoría inválido'
+      });
+    }
+    
+    // Escapar para prevenir XSS
+    const sanitizedSlug = slug.replace(/[<>]/g, '');
+    
+    const category = CategoryController.athenaCategories.find(cat => 
+      cat.slug === sanitizedSlug && cat.isActive
+    );
+    // ... resto del código
+  }
+  // ...
+}
+```
+
+### 🟡 **ALTAS**
+
+#### 3. **Falta de Autenticación/Autorización** (Líneas 149, 327)
+**Problema**: Rutas admin sin verificación de permisos.
+
+**Corrección**:
+```js
+// Middleware de autenticación
+const { authenticateAdmin } = require('../middleware/auth');
+
+// En las rutas (routes/categories.js):
+router.get('/admin/all', authenticateAdmin, CategoryController.getAllCategoriesAdmin);
+router.put('/:slug/toggle', authenticateAdmin, CategoryController.toggleCategory);
+```
+
+#### 4. **Inyección NoSQL Potencial** (Línea 290)
+**Problema**: Query directa con parámetros no validados.
+
+**Corrección**:
+```js
+static async getCategoryStats(req, res) {
+  try {
+    const Product = require('../models/Product');
+    
+    const stats = await Promise.all(
+      CategoryController.athenaCategories
+        .filter(cat => cat.isActive)
+        .map(async (category) => {
+          // Sanitizar parámetro
+          const sanitizedSlug = category.slug.replace(/[\$\.]/g, '');
+          
+          const productCount = await Product.countDocuments({
+            category: { $eq: sanitizedSlug }, // Uso explícito de $eq
+            isActive: { $eq: true }
+          });
+
+          const avgPrice = await Product.aggregate([
+            { 
+              $match: { 
+                category: { $eq: sanitizedSlug },
+                isActive: { $eq: true }
+              } 
+            },
+            // ... resto de la agregación
+          ]);
+          // ...
+        })
+    );
+    // ...
+  }
+  // ...
+}
+```
+
+### 🟠 **MEDIAS**
+
+#### 5. **Exposición de Información Sensible en Logs** (Múltiples líneas)
+**Corrección**:
+```js
+// Reemplazar console.error por logger seguro
+const logger = require('../utils/logger');
+
+// En lugar de:
+console.error('Error obteniendo categorías:', error);
+
+// Usar:
+logger.error('Error obteniendo categorías', { 
+  error: error.message,
+  stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+});
+```
+
+#### 6. **Datos Sensibles en Respuestas** (Línea 266)
+**Corrección**:
+```js
+static async getCategorySEO(req, res) {
+  try {
+    // ... validaciones anteriores
+    
+    // No exponer URLs internas en producción
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://athenabrand.com' 
+      : process.env.FRONTEND_URL;
+      
+    const seoData = {
+      title: category.seoTitle || `${category.name} - ATHENA BRAND`,
+      description: category.seoDescription || category.description,
+      keywords: category.keywords || [],
+      // Remover canonical si no es necesario exponerlo
+      ogTitle: category.seoTitle || `${category.name} - ATHENA BRAND`,
+      ogDescription: category.seoDescription || category.description,
+      ogImage: category.image
+    };
+    // ...
+  }
+  // ...
+}
+```
+
+### 📝 **Implementación de Middleware de Seguridad**
+
+```js
+// middleware/security.js
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+
+const categoryRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // Límite de 100 requests por IP
+  message: {
+    success: false,
+    message: 'Demasiadas solicitudes, intenta más tarde'
+  }
+});
+
+module.exports = { categoryRateLimit };
+```
+
+### 🛡️ **Recomendaciones Generales**
+
+1. **Implementar rate limiting** en todas las rutas
+2. **Usar helmet.js** para headers de seguridad
+3. **Sanitizar todas las entradas** del usuario
+4. **Implementar logging seguro** sin exponer datos sensibles
+5. **Añadir validación de esquemas** con Joi o similar
+6. **Implementar CORS** restrictivo
+7. **Usar HTTPS** en todas las comunicaciones
+
+El código actual es funcional pero necesita importantes mejoras de seguridad antes de ser usado en producción.

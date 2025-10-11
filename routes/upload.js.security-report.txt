@@ -1,0 +1,221 @@
+## Análisis de Vulnerabilidades de Ciberseguridad
+
+He identificado varias vulnerabilidades críticas en este archivo. Aquí está el análisis detallado:
+
+### 🔴 VULNERABILIDADES CRÍTICAS
+
+#### 1. **Path Traversal / Inyección de Comandos** (Líneas 63-64)
+```js
+router.get('/gallery/:folder', adminAuth, UploadController.getGallery);
+router.delete('/:folder/:filename', adminAuth, UploadController.deleteFile);
+```
+
+**Riesgo:** Un atacante puede usar `../` para acceder a directorios fuera del scope permitido.
+
+**Corrección:**
+```js
+const path = require('path');
+const { body, param, validationResult } = require('express-validator');
+
+// Validador de rutas seguras
+const validatePath = (value) => {
+  const normalized = path.normalize(value);
+  if (normalized.includes('..') || normalized.startsWith('/') || normalized.includes('\0')) {
+    throw new Error('Ruta no válida');
+  }
+  return true;
+};
+
+router.get('/gallery/:folder', 
+  adminAuth,
+  param('folder').custom(validatePath),
+  UploadController.getGallery
+);
+
+router.delete('/:folder/:filename', 
+  adminAuth,
+  param('folder').custom(validatePath),
+  param('filename').custom(validatePath),
+  UploadController.deleteFile
+);
+```
+
+#### 2. **Validación Insuficiente de Archivos** (Líneas 12-20)
+```js
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Tipo de archivo no permitido. Solo se permiten imágenes.'), false);
+  }
+};
+```
+
+**Riesgo:** Solo valida MIME type, que puede ser falsificado. No valida la firma del archivo.
+
+**Corrección:**
+```js
+const fileType = require('file-type');
+
+const fileFilter = async (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  
+  // Validar MIME type
+  if (!allowedTypes.includes(file.mimetype)) {
+    return cb(new Error('Tipo MIME no permitido'), false);
+  }
+  
+  // Validar extensión
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (!allowedExtensions.includes(ext)) {
+    return cb(new Error('Extensión de archivo no permitida'), false);
+  }
+  
+  // Validar nombre de archivo
+  if (!/^[a-zA-Z0-9._-]+$/.test(file.originalname)) {
+    return cb(new Error('Nombre de archivo contiene caracteres no permitidos'), false);
+  }
+  
+  cb(null, true);
+};
+
+// Validación adicional con magic numbers
+const validateFileSignature = async (buffer) => {
+  const type = await fileType.fromBuffer(buffer);
+  const allowedTypes = ['jpg', 'png', 'gif', 'webp'];
+  
+  if (!type || !allowedTypes.includes(type.ext)) {
+    throw new Error('Tipo de archivo real no coincide con el declarado');
+  }
+  
+  return type;
+};
+```
+
+#### 3. **Límites de Archivo Configurables** (Línea 24)
+```js
+fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024,
+```
+
+**Riesgo:** Si `MAX_FILE_SIZE` no es un número, `parseInt()` puede retornar `NaN`.
+
+**Corrección:**
+```js
+const getMaxFileSize = () => {
+  const envSize = process.env.MAX_FILE_SIZE;
+  const parsedSize = parseInt(envSize, 10);
+  const maxAllowed = 50 * 1024 * 1024; // 50MB máximo absoluto
+  const defaultSize = 10 * 1024 * 1024; // 10MB por defecto
+  
+  if (isNaN(parsedSize) || parsedSize <= 0) {
+    return defaultSize;
+  }
+  
+  return Math.min(parsedSize, maxAllowed);
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: getMaxFileSize(),
+    files: 5,
+    fieldSize: 1024 * 1024, // 1MB para campos de texto
+    fields: 10 // Máximo 10 campos
+  }
+});
+```
+
+#### 4. **Rate Limiting Ausente**
+**Riesgo:** No hay protección contra ataques de denegación de servicio.
+
+**Corrección:**
+```js
+const rateLimit = require('express-rate-limit');
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 10, // máximo 10 uploads por ventana de tiempo
+  message: {
+    success: false,
+    message: 'Demasiados intentos de upload. Intenta más tarde.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Aplicar a todas las rutas de upload
+router.use(uploadLimiter);
+```
+
+#### 5. **Sanitización de Nombres de Archivo**
+**Riesgo:** Nombres de archivo maliciosos pueden causar problemas.
+
+**Corrección:**
+```js
+const sanitize = require('sanitize-filename');
+const crypto = require('crypto');
+
+const sanitizeFilename = (filename) => {
+  const ext = path.extname(filename);
+  const name = path.basename(filename, ext);
+  
+  // Sanitizar y agregar timestamp único
+  const sanitizedName = sanitize(name).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(4).toString('hex');
+  
+  return `${sanitizedName}_${timestamp}_${randomSuffix}${ext}`;
+};
+```
+
+### 🟡 MEJORAS ADICIONALES RECOMENDADAS
+
+#### 6. **Logging de Seguridad**
+```js
+const logger = require('../utils/logger');
+
+router.use((req, res, next) => {
+  logger.info('Upload attempt', {
+    userId: req.user?.id,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    route: req.path
+  });
+  next();
+});
+```
+
+#### 7. **Validación de Headers de Seguridad**
+```js
+router.use((req, res, next) => {
+  // Validar Content-Type
+  if (!req.is('multipart/form-data')) {
+    return res.status(400).json({
+      success: false,
+      message: 'Content-Type debe ser multipart/form-data'
+    });
+  }
+  next();
+});
+```
+
+#### 8. **Configuración Completa Mejorada**
+```js
+// Configuración completa y segura
+const createSecureUpload = () => {
+  const storage = multer.memoryStorage();
+  
+  return multer({
+    storage,
+    fileFilter: secureFileFilter,
+    limits: {
+      fileSize: getMaxFileSize(),
+      files: 5,
+      fieldSize: 1024,
+      fieldNameSize: 100,
+      fields: 10,
+      

@@ -3,14 +3,26 @@ const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const sendEmail = require('../utils/sendEmail');
+const logger = require('../utils/logger');
+const bcrypt = require('bcrypt');
+const redis = require('redis');
+const client = redis.createClient();
+const validator = require('validator');
+const xss = require('xss');
 
 // Función para generar JWT
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || '7d',
+const generateTokenPair = async (userId) => {
+  const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: '15m' // Token corto
   });
+  
+  const refreshToken = crypto.randomBytes(40).toString('hex');
+  
+  // Guardar refresh token en Redis con expiración
+  await client.setex(`refresh_token:${userId}`, 604800, refreshToken); // 7 días
+  
+  return { accessToken, refreshToken };
 };
-
 // Función para crear respuesta de usuario limpia
 const createUserResponse = (user) => {
   const userResponse = user.toObject();
@@ -98,87 +110,35 @@ class AuthController {
       console.error('Error en registro:', error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        message: 'Error interno del servidor'
       });
     }
+          // Log interno sin exposición
+      logger.error('Error en registro:', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.userId
+      });
   }
 
   // POST /api/auth/login - Login de usuario
   static async login(req, res) {
     try {
-      // Verificar errores de validación
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Datos de login inválidos',
-          errors: errors.array()
-        });
-      }
-
-      const { email, password } = req.body;
-
-      // Buscar usuario con contraseña
-      const user = await User.findOne({ email }).select('+password');
-      
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Credenciales inválidas'
-        });
-      }
-
-      // Verificar si la cuenta está bloqueada
-      if (user.isLocked) {
-        return res.status(423).json({
-          success: false,
-          message: 'Cuenta temporalmente bloqueada debido a múltiples intentos de login fallidos'
-        });
-      }
-
-      // Verificar contraseña
-      const isPasswordValid = await user.comparePassword(password);
-      
-      if (!isPasswordValid) {
-        // Incrementar intentos fallidos
-        await user.incrementLoginAttempts();
-        
-        return res.status(401).json({
-          success: false,
-          message: 'Credenciales inválidas'
-        });
-      }
-
-      // Verificar si la cuenta está activa
-      if (!user.isActive) {
-        return res.status(423).json({
-          success: false,
-          message: 'Cuenta desactivada. Contacta al soporte.'
-        });
-      }
-
-      // Login exitoso - resetear intentos fallidos
-      if (user.loginAttempts > 0) {
-        await user.resetLoginAttempts();
-      }
-
-      // Actualizar último login
-      user.lastLogin = new Date();
-      await user.save();
-
-      // Generar JWT
-      const token = generateToken(user._id);
-
-      // Respuesta sin datos sensibles
-      const userResponse = createUserResponse(user);
-
-      res.json({
-        success: true,
-        message: 'Login exitoso',
-        token,
-        user: userResponse
+    const { email, password } = req.body;
+    let user = await User.findOne({ email }).select('+password');
+    
+    // Simular hash comparison aunque el usuario no exista
+    const dummyHash = '$2b$12$dummy.hash.to.prevent.timing.attacks.abcdefghijklmnopqrstuvwxyz';
+    const passwordToCheck = user ? user.password : dummyHash;
+    
+    const isPasswordValid = await bcrypt.compare(password, passwordToCheck);
+    
+    if (!user || !isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Credenciales inválidas'
       });
+    }
 
     } catch (error) {
       console.error('Error en login:', error);
@@ -233,11 +193,23 @@ class AuthController {
       const allowedUpdates = ['firstName', 'lastName', 'phone', 'address', 'birthDate', 'gender', 'preferences'];
       const updates = {};
       
-      allowedUpdates.forEach(field => {
-        if (req.body[field] !== undefined) {
-          updates[field] = req.body[field];
-        }
-      });
+allowedUpdates.forEach(field => {
+  if (req.body[field] !== undefined) {
+    let value = req.body[field];
+    
+    // Sanitizar strings
+    if (typeof value === 'string') {
+      value = xss(value.trim());
+      
+      // Validaciones específicas por campo
+      if (field === 'phone' && !validator.isMobilePhone(value)) {
+        throw new Error('Número de teléfono inválido');
+      }
+    }
+    
+    updates[field] = value;
+  }
+});
 
       const user = await User.findByIdAndUpdate(
         req.userId,
@@ -271,6 +243,7 @@ class AuthController {
           message: 'Token de verificación requerido'
         });
       }
+      
 
       const user = await User.findOne({
         verificationToken: token,

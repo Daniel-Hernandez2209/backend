@@ -1,0 +1,210 @@
+## Análisis de Vulnerabilidades de Seguridad
+
+He identificado varias vulnerabilidades críticas en este archivo. Aquí está el análisis detallado:
+
+### 🔴 **CRÍTICO - Configuración TLS Insegura**
+**Línea 19:** `rejectUnauthorized: false`
+
+**Problema:** Deshabilita la validación de certificados TLS, permitiendo ataques man-in-the-middle.
+
+**Corrección:**
+```js
+const createTransporter = () => {
+  return nodemailer.createTransporter({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: process.env.EMAIL_PORT === '465', // true solo para puerto 465
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      rejectUnauthorized: true, // ✅ SIEMPRE true en producción
+      minVersion: 'TLSv1.2'     // Forzar versión mínima segura
+    }
+  });
+};
+```
+
+### 🔴 **CRÍTICO - XSS (Cross-Site Scripting)**
+**Líneas 37, 79, 114, 139, 178, 212:** Interpolación directa sin sanitización
+
+**Problema:** Los datos del usuario se insertan directamente en HTML sin escapar, permitiendo XSS.
+
+**Corrección - Función de sanitización:**
+```js
+const he = require('he'); // npm install he
+
+// Función para escapar HTML
+const escapeHtml = (unsafe) => {
+  if (typeof unsafe !== 'string') return unsafe;
+  return he.encode(unsafe);
+};
+
+// Ejemplo de uso en template:
+case 'verification':
+  return {
+    subject: 'Verificar cuenta - ATHENA BRAND',
+    html: `
+      <h2 style="color: #161411; margin-bottom: 20px;">¡Hola ${escapeHtml(data.firstName)}!</h2>
+      <!-- Resto del template -->
+    `
+  };
+```
+
+### 🟡 **ALTO - Falta de Validación de Entrada**
+**Líneas 237-260:** No hay validación de parámetros de entrada
+
+**Corrección:**
+```js
+const Joi = require('joi'); // npm install joi
+
+const emailSchema = Joi.object({
+  to: Joi.string().email().required(),
+  template: Joi.string().valid('verification', 'password-reset', 'order-confirmation', 'order-status-update'),
+  data: Joi.object().when('template', {
+    is: Joi.exist(),
+    then: Joi.required(),
+    otherwise: Joi.optional()
+  }),
+  subject: Joi.string().max(200),
+  html: Joi.string(),
+  text: Joi.string()
+}).or('template', 'subject');
+
+const sendEmail = async (params) => {
+  // Validar entrada
+  const { error, value } = emailSchema.validate(params);
+  if (error) {
+    throw new Error(`Parámetros inválidos: ${error.details[0].message}`);
+  }
+  
+  const { to, subject, template, data, html, text } = value;
+  
+  try {
+    const transporter = createTransporter();
+    // ... resto del código
+  } catch (error) {
+    // Log seguro sin exponer datos sensibles
+    console.error('❌ Error enviando email a:', to.replace(/(.{2}).+(@.+)/, '$1***$2'));
+    throw new Error('Error interno del servidor');
+  }
+};
+```
+
+### 🟡 **ALTO - Exposición de Información Sensible**
+**Líneas 290-296:** Logs exponen información sensible
+
+**Corrección:**
+```js
+// Función para logging seguro
+const logEmailResult = (to, subject, messageId, isError = false) => {
+  const maskedEmail = to.replace(/(.{2}).+(@.+)/, '$1***$2');
+  const logData = {
+    to: maskedEmail,
+    subject: subject ? subject.substring(0, 50) + '...' : 'N/A',
+    messageId: messageId || 'N/A',
+    timestamp: new Date().toISOString()
+  };
+  
+  if (isError) {
+    console.error('❌ Error enviando email:', logData);
+  } else {
+    console.log('✅ Email enviado exitosamente:', logData);
+  }
+};
+
+// Uso en sendEmail:
+const result = await transporter.sendMail(mailOptions);
+logEmailResult(to, emailContent.subject, result.messageId);
+```
+
+### 🟡 **MEDIO - Inyección de URL**
+**Líneas 45, 87, 147, 218:** URLs construidas sin validación
+
+**Corrección:**
+```js
+const url = require('url');
+
+const validateAndBuildUrl = (baseUrl, path, params = {}) => {
+  try {
+    // Validar URL base
+    const base = new URL(baseUrl);
+    if (!['http:', 'https:'].includes(base.protocol)) {
+      throw new Error('Protocolo no permitido');
+    }
+    
+    // Construir URL segura
+    const fullUrl = new URL(path, base);
+    
+    // Agregar parámetros de forma segura
+    Object.keys(params).forEach(key => {
+      fullUrl.searchParams.append(key, params[key]);
+    });
+    
+    return fullUrl.toString();
+  } catch (error) {
+    throw new Error('URL inválida');
+  }
+};
+
+// Uso en templates:
+const verificationUrl = validateAndBuildUrl(
+  process.env.FRONTEND_URL,
+  '/verificar-cuenta',
+  { token: data.verificationToken }
+);
+```
+
+### 🟡 **MEDIO - Rate Limiting**
+**Todo el archivo:** No hay protección contra spam de emails
+
+**Corrección:**
+```js
+const rateLimit = new Map();
+
+const checkRateLimit = (email, maxEmails = 5, windowMs = 3600000) => { // 5 emails por hora
+  const now = Date.now();
+  const userLimits = rateLimit.get(email) || { count: 0, resetTime: now + windowMs };
+  
+  if (now > userLimits.resetTime) {
+    userLimits.count = 0;
+    userLimits.resetTime = now + windowMs;
+  }
+  
+  if (userLimits.count >= maxEmails) {
+    throw new Error('Límite de emails excedido. Inténtalo más tarde.');
+  }
+  
+  userLimits.count++;
+  rateLimit.set(email, userLimits);
+};
+
+// Aplicar en sendEmail antes de enviar
+```
+
+### 🟢 **BAJO - Mejoras Generales**
+
+**Configuración más segura:**
+```js
+// Agregar al inicio del archivo
+if (process.env.NODE_ENV === 'production' && !validateEmailConfig()) {
+  throw new Error('Configuración de email incompleta en producción');
+}
+
+// Timeout para conexiones
+const createTransporter = () => {
+  return nodemailer.createTransporter({
+    // ... configuración existente ...
+    connectionTimeout: 10000, // 10 segundos
+    greetingTimeout: 5000,    // 5 segundos
+    socketTimeout: 30000      // 30 segundos
+  });
+};
+```
+
+## 📋 **Resumen de Prioridades**
+
+1. **INMEDIATO:** Corregir `rejectUnauthorized: false`
+2. **URGENTE:** Implementar sanitización HTML para prevenir XSS
+3. **ALTA:** Agr

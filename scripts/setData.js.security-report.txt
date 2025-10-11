@@ -1,0 +1,218 @@
+## Análisis de Vulnerabilidades de Seguridad
+
+He identificado varias vulnerabilidades importantes en este archivo de seed. Aquí está el análisis detallado:
+
+### 🚨 **CRÍTICAS**
+
+#### 1. **Exposición de Credenciales en Texto Plano** (Líneas 198-261)
+**Problema**: Las contraseñas están hardcodeadas en texto plano y se muestran en logs.
+```js
+// VULNERABLE - Líneas 201, 215, 229
+password: 'admin123',
+password: 'cliente123', 
+password: 'maria123',
+```
+
+**Solución**:
+```js
+const testUsers = [
+  {
+    email: 'admin@athenabrand.co',
+    password: await bcrypt.hash(process.env.DEFAULT_ADMIN_PASSWORD || 'TempPassword123!', 12),
+    // ... resto del objeto
+  }
+];
+
+// Y remover los logs de contraseñas (líneas 314-316)
+console.log('👥 Usuarios de prueba creados exitosamente');
+// NO mostrar contraseñas en logs
+```
+
+#### 2. **Falta de Validación en Variables de Entorno** (Línea 17)
+**Problema**: MongoDB URI puede ser undefined o maliciosa.
+```js
+// VULNERABLE
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/athena_brand')
+```
+
+**Solución**:
+```js
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI no está definida en las variables de entorno');
+  process.exit(1);
+}
+
+// Validar formato de URI
+if (!MONGODB_URI.match(/^mongodb(\+srv)?:\/\/.+/)) {
+  console.error('❌ Formato de MongoDB URI inválido');
+  process.exit(1);
+}
+
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+```
+
+### ⚠️ **ALTAS**
+
+#### 3. **Inyección NoSQL Potencial** (Línea 276)
+**Problema**: Uso de datos no validados en operaciones de base de datos.
+```js
+// VULNERABLE
+const user = new User(userData);
+await user.save();
+```
+
+**Solución**:
+```js
+// Validar y sanitizar datos antes de guardar
+const { email, firstName, lastName, role, phone } = userData;
+
+// Validaciones
+if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+  throw new Error('Email inválido');
+}
+
+if (!firstName || firstName.length < 2 || firstName.length > 50) {
+  throw new Error('Nombre inválido');
+}
+
+if (role && !['admin', 'customer', 'moderator'].includes(role)) {
+  throw new Error('Rol inválido');
+}
+
+const sanitizedUserData = {
+  email: email.toLowerCase().trim(),
+  firstName: firstName.trim(),
+  lastName: lastName.trim(),
+  role: role || 'customer',
+  phone: phone ? phone.replace(/[^\d+\-\s]/g, '') : undefined,
+  // ... resto de campos validados
+};
+
+const user = new User(sanitizedUserData);
+```
+
+#### 4. **Generación Insegura de SKU** (Líneas 286-290)
+**Problema**: SKUs predecibles que pueden causar conflictos.
+```js
+// VULNERABLE
+const categoryCode = productData.category.substring(0, 3).toUpperCase();
+const timestamp = Date.now().toString().slice(-4);
+productData.sku = `ATH-${categoryCode}-${timestamp}`;
+```
+
+**Solución**:
+```js
+const crypto = require('crypto');
+
+// Función para generar SKU seguro
+function generateSecureSKU(category) {
+  const categoryCode = category.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
+  const randomBytes = crypto.randomBytes(4).toString('hex').toUpperCase();
+  const timestamp = Date.now().toString(36).toUpperCase();
+  return `ATH-${categoryCode}-${timestamp}-${randomBytes}`;
+}
+
+// Usar en el código
+productData.sku = generateSecureSKU(productData.category);
+```
+
+### 📊 **MEDIAS**
+
+#### 5. **Manejo Inseguro de Errores** (Línea 303)
+**Problema**: Exposición de información sensible en logs de error.
+```js
+// VULNERABLE
+console.error('❌ Error poblando la base de datos:', error);
+```
+
+**Solución**:
+```js
+console.error('❌ Error poblando la base de datos');
+// En desarrollo, mostrar error completo
+if (process.env.NODE_ENV === 'development') {
+  console.error('Detalles del error:', error);
+} else {
+  // En producción, solo log sin detalles sensibles
+  console.error('Error code:', error.code || 'UNKNOWN');
+}
+```
+
+#### 6. **Falta de Sanitización en Slugs** (Línea 284)
+**Problema**: Los slugs pueden contener caracteres no seguros.
+```js
+// MEJORABLE
+productData.slug = slugify(productData.name, slugConfig);
+```
+
+**Solución**:
+```js
+function createSecureSlug(name) {
+  if (!name || typeof name !== 'string') {
+    throw new Error('Nombre de producto inválido para slug');
+  }
+  
+  const slug = slugify(name, {
+    lower: true,
+    strict: true,
+    locale: 'es',
+    remove: /[*+~.()'"!:@]/g // Remover caracteres especiales
+  });
+  
+  // Validar longitud y caracteres
+  if (slug.length < 3 || slug.length > 100) {
+    throw new Error('Slug fuera de rango permitido');
+  }
+  
+  return slug;
+}
+
+productData.slug = createSecureSlug(productData.name);
+```
+
+### 🔧 **Archivo Corregido (Ejemplo Parcial)**
+
+```js
+require('dotenv').config();
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const Product = require('../models/Product');
+const User = require('../models/User');
+const slugify = require('slugify');
+
+// Validaciones de entorno
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI requerida');
+  process.exit(1);
+}
+
+// Validar que las contraseñas estén en variables de entorno
+if (!process.env.DEFAULT_ADMIN_PASSWORD) {
+  console.error('❌ DEFAULT_ADMIN_PASSWORD requerida');
+  process.exit(1);
+}
+
+// Función de validación de email
+function validateEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Función para generar SKU seguro
+function generateSecureSKU(category) {
+  const categoryCode = category.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
+  const randomBytes = crypto.randomBytes(4).toString('hex').toUpperCase();
+  const timestamp = Date.now().toString(36).toUpperCase();
+  return `ATH-${categoryCode}-${timestamp}-${randomBytes}`;
+}
+
+// Usuarios con contraseñas hasheadas
+const createTestUsers = async () => {
+  return [
+    {
+      email:

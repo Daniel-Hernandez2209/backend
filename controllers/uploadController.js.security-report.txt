@@ -1,0 +1,198 @@
+## Análisis de Vulnerabilidades de Ciberseguridad
+
+He identificado varias vulnerabilidades críticas en este controlador de subida de archivos:
+
+### 🔴 **VULNERABILIDADES CRÍTICAS**
+
+#### 1. **Path Traversal / Directory Traversal** (Líneas 189, 257, 295, 369, 395, 493)
+**Riesgo:** Muy Alto - Permite acceso a archivos fuera del directorio permitido
+
+```js
+// VULNERABLE:
+const filePath = path.join('uploads', folder, filename);
+
+// CORREGIDO:
+static sanitizeFilename(filename) {
+  return filename.replace(/[^a-zA-Z0-9.-]/g, '').substring(0, 255);
+}
+
+static validatePath(basePath, userPath) {
+  const resolvedPath = path.resolve(basePath, userPath);
+  const resolvedBase = path.resolve(basePath);
+  return resolvedPath.startsWith(resolvedBase) ? resolvedPath : null;
+}
+
+// Uso:
+const sanitizedFilename = UploadController.sanitizeFilename(filename);
+const safePath = UploadController.validatePath('uploads/' + folder, sanitizedFilename);
+if (!safePath) {
+  return res.status(400).json({ success: false, message: 'Ruta no válida' });
+}
+```
+
+#### 2. **Falta de Validación de Tipos de Archivo** (Líneas 45-116)
+**Riesgo:** Muy Alto - Permite subida de archivos ejecutables
+
+```js
+// AÑADIR función de validación:
+static validateFileType(buffer, filename) {
+  const allowedTypes = {
+    'image/jpeg': [0xFF, 0xD8, 0xFF],
+    'image/png': [0x89, 0x50, 0x4E, 0x47],
+    'image/gif': [0x47, 0x49, 0x46],
+    'image/webp': [0x52, 0x49, 0x46, 0x46]
+  };
+  
+  const ext = path.extname(filename).toLowerCase();
+  const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  
+  if (!allowedExts.includes(ext)) return false;
+  
+  // Verificar magic numbers
+  for (const [mimeType, signature] of Object.entries(allowedTypes)) {
+    if (signature.every((byte, i) => buffer[i] === byte)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Aplicar en cada función de upload:
+if (!UploadController.validateFileType(file.buffer, file.originalname)) {
+  throw new Error('Tipo de archivo no permitido');
+}
+```
+
+#### 3. **Ausencia de Límites de Tamaño** (Todo el código)
+**Riesgo:** Alto - DoS por agotamiento de recursos
+
+```js
+// AÑADIR al inicio de cada función de upload:
+static validateFileSize(buffer, maxSize = 5 * 1024 * 1024) { // 5MB por defecto
+  if (buffer.length > maxSize) {
+    throw new Error(`Archivo demasiado grande. Máximo: ${maxSize / 1024 / 1024}MB`);
+  }
+  return true;
+}
+
+// En cada upload:
+UploadController.validateFileSize(file.buffer);
+```
+
+#### 4. **XSS en Respuestas** (Líneas 79, 87)
+**Riesgo:** Alto - Ejecución de scripts maliciosos
+
+```js
+// VULNERABLE:
+originalName: file.originalname,
+alt: req.body.alt || ''
+
+// CORREGIDO:
+const he = require('he'); // npm install he
+
+static sanitizeInput(input) {
+  if (typeof input !== 'string') return '';
+  return he.encode(input).substring(0, 255);
+}
+
+// Uso:
+originalName: UploadController.sanitizeInput(file.originalname),
+alt: UploadController.sanitizeInput(req.body.alt || '')
+```
+
+#### 5. **Exposición de Información Sensible** (Líneas 92, 119, 161, etc.)
+**Riesgo:** Medio - Revelación de estructura del sistema
+
+```js
+// VULNERABLE:
+error: process.env.NODE_ENV === 'development' ? error.message : {}
+
+// CORREGIDO:
+static getErrorResponse(error) {
+  return {
+    success: false,
+    message: 'Error interno del servidor',
+    ...(process.env.NODE_ENV === 'development' && { debug: error.message })
+  };
+}
+```
+
+#### 6. **Falta de Rate Limiting** (Todo el controlador)
+**Riesgo:** Alto - Ataques de fuerza bruta y DoS
+
+```js
+// Implementar con express-rate-limit:
+const rateLimit = require('express-rate-limit');
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 10, // máximo 10 uploads por ventana
+  message: { success: false, message: 'Demasiadas subidas, intenta más tarde' }
+});
+```
+
+#### 7. **Condición de Carrera** (Líneas 65-70)
+**Riesgo:** Medio - Sobrescritura de archivos
+
+```js
+// MEJORAR generación de nombres únicos:
+const crypto = require('crypto');
+
+static generateSecureFileName(originalName, prefix = '') {
+  const timestamp = Date.now();
+  const random = crypto.randomBytes(16).toString('hex');
+  const ext = path.extname(originalName).toLowerCase();
+  return `${prefix}${timestamp}-${random}${ext}`;
+}
+```
+
+### 🔧 **IMPLEMENTACIÓN COMPLETA SEGURA**
+
+```js
+const rateLimit = require('express-rate-limit');
+const he = require('he');
+const crypto = require('crypto');
+
+// Middleware de rate limiting
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { success: false, message: 'Demasiadas subidas' }
+});
+
+class SecureUploadController {
+  static validateFileType(buffer, filename) {
+    const allowedTypes = {
+      'image/jpeg': [0xFF, 0xD8, 0xFF],
+      'image/png': [0x89, 0x50, 0x4E, 0x47],
+      'image/gif': [0x47, 0x49, 0x46],
+      'image/webp': [0x52, 0x49, 0x46, 0x46]
+    };
+    
+    const ext = path.extname(filename).toLowerCase();
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    
+    if (!allowedExts.includes(ext)) return false;
+    
+    for (const [mimeType, signature] of Object.entries(allowedTypes)) {
+      if (signature.every((byte, i) => buffer[i] === byte)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static validateFileSize(buffer, maxSize = 5 * 1024 * 1024) {
+    if (buffer.length > maxSize) {
+      throw new Error(`Archivo demasiado grande. Máximo: ${maxSize / 1024 / 1024}MB`);
+    }
+    return true;
+  }
+
+  static sanitizeInput(input) {
+    if (typeof input !== 'string') return '';
+    return he.encode(input.trim()).substring(0, 255);
+  }
+
+  static sanitizeFilename(filename) {
+    return filename.replace(/
