@@ -1,4 +1,5 @@
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -15,3 +16,14 @@ app.use(helmet({
     preload: true
   }
 }));
+
+const categoryRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // Límite de 100 requests por IP
+  message: {
+    success: false,
+    message: 'Demasiadas solicitudes, intenta más tarde'
+  }
+});
+
+module.exports = { categoryRateLimit };

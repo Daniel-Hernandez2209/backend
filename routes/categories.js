@@ -1,24 +1,37 @@
-// routes/categories.js - Rutas de categorías actualizadas con controladores
+// routes/categories.js - Rutas públicas
 const express = require('express');
 const CategoryController = require('../controllers/categoryController');
-const { adminAuth } = require('../middleware/auth');
+const { default: rateLimit } = require('express-rate-limit');
+const  { categoryRateLimit, heavyReadLimiter, seoLimiter } = require('../middleware/security');
+const { publicReadLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
-// Rutas públicas
-router.get('/', CategoryController.getAllCategories);
-router.get('/menu', CategoryController.getMenuCategories);
-router.get('/sitemap', CategoryController.getSitemapData);
-router.get('/stats', CategoryController.getCategoryStats);
-router.get('/seo/:slug', CategoryController.getCategorySEO);
-router.get('/:slug', CategoryController.getCategoryBySlug);
-router.get('/:slug/subcategories', CategoryController.getSubcategories);
+app.use(rateLimit)
 
-// Rutas de administrador
-router.get('/admin/all', adminAuth, CategoryController.getAllCategoriesAdmin);
-router.put('/:slug/toggle', adminAuth, CategoryController.toggleCategory);
+// Rutas públicas ordenadas correctamente
+router.get('/', CategoryController.getAllCategories, categoryRateLimit);
+router.get('/menu', CategoryController.getMenuCategories, categoryRateLimit);
+router.get('/sitemap', CategoryController.getSitemapData, categoryRateLimit);
+router.get('/stats', CategoryController.getCategoryStats, heavyReadLimiter);
+
+router.get('/seo/:slug', 
+  CategoryController.validateSlugParam,
+  CategoryController.getCategorySEO,
+    seoLimiter
+);
+
+router.get('/:slug/subcategories', 
+  CategoryController.validateSlugParam,
+  CategoryController.getSubcategories,
+  publicReadLimiter
+
+);
+
+router.get('/:slug', 
+  CategoryController.validateSlugParam,
+  CategoryController.getCategoryBySlug,
+  publicReadLimiter
+);
 
 module.exports = router;
-
-
-

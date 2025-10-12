@@ -21,10 +21,15 @@ const logger = winston.createLogger({
   ],
 });
 // Filtrar datos sensibles
-logger.addFilter((info) => {
+const filterSensitiveData = winston.format((info) => {
   if (info.password) delete info.password;
   if (info.token) delete info.token;
   return info;
 });
+logger.format = winston.format.combine(
+  filterSensitiveData(),
+  logger.format
+);
+
 
 module.exports = logger;

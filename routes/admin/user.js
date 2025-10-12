@@ -1,7 +1,7 @@
 // routes/admin.js - Rutas de administrador
 const express = require('express');
 const router = express.Router();
-const { auth, adminAuth } = require('../middleware/auth');
+const { auth, adminAuth } = require('../../middleware/auth');
 const rateLimit = require('express-rate-limit');
 const AdminController = require('../controllers/adminController');
 

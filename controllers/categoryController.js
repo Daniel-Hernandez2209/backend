@@ -1,157 +1,107 @@
-// controllers/categoryController.js - Controlador de categorías para ATHENA BRAND
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://athenabrand.com';
-const ALLOWED_DOMAINS = ['athenabrand.com', 'www.athenabrand.com'];
-const { adminAuth } = require('../middleware/auth');
+// controllers/categoryController.js - VERSIÓN CON MONGODB
+const Category = require('../models/Category');
+const logger = require('../utils/logger');
+const NodeCache = require('node-cache');
+
+// Cache con TTL de 1 hora
+const categoryCache = new NodeCache({ 
+  stdTTL: 3600,
+  checkperiod: 600 // Verificar cada 10 minutos
+});
 
 class CategoryController {
-  // Categorías fijas de ATHENA BRAND con información adicional
-  static athenaCategories = [
-    {
-      slug: 'hombre',
-      name: 'HOMBRE',
-      description: 'Moda urbana masculina. Streetwear auténtico con estilo colombiano.',
-      image: '/uploads/categories/hombre-banner.jpg',
-      subcategories: [
-        { name: 'Camisetas', slug: 'camisetas', description: 'Camisetas básicas y estampadas' },
-        { name: 'Hoodies', slug: 'hoodies', description: 'Sudaderas con capucha' },
-        { name: 'Pantalones', slug: 'pantalones', description: 'Jeans y pantalones urbanos' },
-        { name: 'Chaquetas', slug: 'chaquetas', description: 'Chaquetas y abrigos' },
-        { name: 'Accesorios', slug: 'accesorios', description: 'Gorras, pulseras y más' }
-      ],
-      isActive: true,
-      order: 1,
-      seoTitle: 'Ropa de Hombre - ATHENA BRAND | Streetwear Masculino Colombia',
-      seoDescription: 'Descubre nuestra colección de ropa urbana para hombre. Camisetas, hoodies, jeans y accesorios. Streetwear auténtico desde San Pedro, Antioquia.',
-      keywords: ['ropa hombre', 'streetwear masculino', 'moda urbana', 'camisetas hombre', 'hoodies colombia']
-    },
+  
+  // Helper para manejo de errores
+  static handleError(res, error, context) {
+    logger.error(`Error en ${context}`, { 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
     
-    {
-      slug: 'mujer',
-      name: 'MUJER',
-      description: 'Moda femenina urbana. Piezas únicas para mujeres que marcan la diferencia.',
-      image: '/uploads/categories/mujer-banner.jpg',
-      subcategories: [
-        { name: 'Tops', slug: 'tops', description: 'Tops, crop tops y blusas' },
-        { name: 'Hoodies', slug: 'hoodies', description: 'Sudaderas femeninas' },
-        { name: 'Pantalones', slug: 'pantalones', description: 'Jeans y leggins' },
-        { name: 'Chaquetas', slug: 'chaquetas', description: 'Chaquetas y blazers' },
-        { name: 'Accesorios', slug: 'accesorios', description: 'Accesorios femeninos' }
-      ],
-      isActive: true,
-      order: 2,
-      seoTitle: 'Ropa de Mujer - ATHENA BRAND | Streetwear Femenino Colombia',
-      seoDescription: 'Colección femenina de streetwear. Tops, hoodies, jeans y accesorios para mujeres urbanas. Moda colombiana auténtica.',
-      keywords: ['ropa mujer', 'streetwear femenino', 'moda urbana mujer', 'tops mujer', 'hoodies mujer']
-    },
-    
-    {
-      slug: 'deportivos',
-      name: 'DEPORTIVOS',
-      description: 'Ropa deportiva y athleisure. Comodidad y estilo para tu vida activa.',
-      image: '/uploads/categories/deportivos-banner.jpg',
-      subcategories: [
-        { name: 'Conjuntos', slug: 'conjuntos', description: 'Sets deportivos completos' },
-        { name: 'Camisetas', slug: 'camisetas', description: 'Camisetas técnicas' },
-        { name: 'Pantalones', slug: 'pantalones', description: 'Leggins y shorts deportivos' },
-        { name: 'Sudaderas', slug: 'sudaderas', description: 'Hoodies deportivos' },
-        { name: 'Accesorios', slug: 'accesorios', description: 'Accesorios fitness' }
-      ],
-      isActive: true,
-      order: 3,
-      seoTitle: 'Ropa Deportiva - ATHENA BRAND | Athleisure Colombia',
-      seoDescription: 'Ropa deportiva de alta calidad. Conjuntos, leggins, camisetas técnicas y más. Perfecta para gym, yoga y vida cotidiana.',
-      keywords: ['ropa deportiva', 'athleisure', 'conjuntos deportivos', 'leggins', 'ropa gym']
-    },
-    
-    {
-      slug: 'hoodies-sacos',
-      name: 'HOODIES Y SACOS',
-      description: 'Sudaderas y sacos de alta calidad. La esencia del streetwear en cada prenda.',
-      image: '/uploads/categories/hoodies-banner.jpg',
-      subcategories: [
-        { name: 'Hoodies', slug: 'hoodies', description: 'Sudaderas con capucha' },
-        { name: 'Sacos', slug: 'sacos', description: 'Sacos sin capucha' },
-        { name: 'Oversized', slug: 'oversized', description: 'Cortes holgados' },
-        { name: 'Zip Hoodies', slug: 'zip-hoodies', description: 'Con cierre frontal' },
-        { name: 'Vintage', slug: 'vintage', description: 'Estilo retro' }
-      ],
-      isActive: true,
-      order: 4,
-      seoTitle: 'Hoodies y Sacos - ATHENA BRAND | Sudaderas Colombia',
-      seoDescription: 'Hoodies y sacos de máxima calidad. Diseños únicos, cortes perfectos y materiales premium. La esencia del streetwear colombiano.',
-      keywords: ['hoodies', 'sudaderas', 'sacos', 'streetwear', 'sudaderas colombia', 'hoodies bogota']
-    },
-    
-    {
-      slug: 'chaquetas',
-      name: 'CHAQUETAS',
-      description: 'Chaquetas urbanas para toda ocasión. Desde cortavientos hasta blazers.',
-      image: '/uploads/categories/chaquetas-banner.jpg',
-      subcategories: [
-        { name: 'Cortavientos', slug: 'cortavientos', description: 'Chaquetas ligeras' },
-        { name: 'Denim', slug: 'denim', description: 'Chaquetas de jean' },
-        { name: 'Bomber', slug: 'bomber', description: 'Chaquetas bomber' },
-        { name: 'Urbanas', slug: 'urbanas', description: 'Chaquetas streetwear' },
-        { name: 'Abrigos', slug: 'abrigos', description: 'Para clima frío' }
-      ],
-      isActive: true,
-      order: 5,
-      seoTitle: 'Chaquetas Urbanas - ATHENA BRAND | Outerwear Colombia',
-      seoDescription: 'Chaquetas urbanas de alta calidad. Cortavientos, bombers, denim y más. Perfectas para el clima colombiano.',
-      keywords: ['chaquetas urbanas', 'cortavientos', 'chaquetas colombia', 'bomber', 'outerwear']
-    }
-  ];
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
 
-  // GET /api/categories - Obtener todas las categorías
-  static async getAllCategories(req, res) {
-    try {
-      // Filtrar solo categorías activas
-      const activeCategories = CategoryController.athenaCategories
-        .filter(cat => cat.isActive)
-        .sort((a, b) => a.order - b.order);
-
-      res.json({
-        success: true,
-        data: activeCategories,
-        message: 'Categorías ATHENA BRAND obtenidas exitosamente'
+  // Helper para limpiar caché
+  static clearCache(pattern = null) {
+    if (pattern) {
+      const keys = categoryCache.keys();
+      keys.forEach(key => {
+        if (key.includes(pattern)) {
+          categoryCache.del(key);
+        }
       });
-
-    } catch (error) {
-      console.error('Error obteniendo categorías:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+    } else {
+      categoryCache.flushAll();
     }
   }
 
-  // GET /api/categories/menu - Obtener categorías para el menú (simplificado)
-  static async getMenuCategories(req, res) {
-    try {
+  // Validación de slug
+  static validateSlug(slug) {
+    const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+    return slugRegex.test(slug) && slug.length >= 2 && slug.length <= 50;
+  }
 
-              // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
+  // Middleware de validación
+  static validateSlugParam(req, res, next) {
+    const { slug } = req.params;
+    
+    if (!slug || !CategoryController.validateSlug(slug)) {
       return res.status(400).json({
         success: false,
-        message: 'Formato de categoría inválido'
+        message: 'Slug inválido'
       });
     }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-    const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
+    next();
+  }
 
-    const menuCategories = CategoryController.athenaCategories
-        .filter(cat => cat.isActive)
-        .sort((a, b) => a.order - b.order)
-        .map(cat => ({
+  // GET /api/categories - Obtener todas las categorías activas
+  static async getAllCategories(req, res) {
+    try {
+      const cacheKey = 'active_categories';
+      let categories = categoryCache.get(cacheKey);
+      
+      if (!categories) {
+        categories = await Category.findActiveOrdered()
+          .select('-__v') // Excluir campo de versión
+          .lean(); // Convertir a objetos JS planos para mejor performance
+        
+        categoryCache.set(cacheKey, categories);
+        logger.info('Categorías cargadas desde DB y cacheadas');
+      }
+      
+      res.json({ 
+        success: true, 
+        data: categories,
+        message: 'Categorías obtenidas exitosamente'
+      });
+
+    } catch (error) {
+      return CategoryController.handleError(res, error, 'getAllCategories');
+    }
+  }
+
+  // GET /api/categories/menu - Menú simplificado
+  static async getMenuCategories(req, res) {
+    try {
+      const cacheKey = 'menu_categories';
+      let menuCategories = categoryCache.get(cacheKey);
+      
+      if (!menuCategories) {
+        const categories = await Category.findActiveOrdered()
+          .select('slug name subcategories')
+          .lean();
+        
+        menuCategories = categories.map(cat => ({
           slug: cat.slug,
           name: cat.name,
-          subcategories: cat.subcategories.slice(0, 5) // Solo las primeras 5 subcategorías
+          subcategories: cat.subcategories.slice(0, 5)
         }));
+        
+        categoryCache.set(cacheKey, menuCategories);
+      }
 
       res.json({
         success: true,
@@ -159,70 +109,31 @@ class CategoryController {
       });
 
     } catch (error) {
-      console.error('Error obteniendo menú de categorías:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      return CategoryController.handleError(res, error, 'getMenuCategories');
     }
   }
-
-  
- static validateDomain(url) { // Validar dominios permitidos
-  try {
-    const { hostname } = new URL(url);
-    return ALLOWED_DOMAINS.includes(hostname);
-  } catch {
-    return false;
-  }
- }
-
- // Función de validación de slug
-static validateSlug(slug) {
-  // Solo letras, números, guiones y guiones bajos
-  const slugRegex = /^[a-zA-Z0-9-_]+$/;
-  return slugRegex.test(slug) && slug.length <= 50;
-}
-
-// Middleware de validación
-static validateSlugParam(req, res, next) {
-  const { slug } = req.params;
-  
-  if (!slug || !CategoryController.validateSlug(slug)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Slug inválido'
-    });
-  }
-  next();
-}
-
 
   // GET /api/categories/:slug - Obtener categoría específica
   static async getCategoryBySlug(req, res) {
     try {
       const { slug } = req.params;
-          // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Formato de categoría inválido'
-      });
-    }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-     const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
-
-
+      const cacheKey = `category_${slug}`;
+      
+      let category = categoryCache.get(cacheKey);
+      
       if (!category) {
-        return res.status(404).json({
-          success: false,
-          message: 'Categoría no encontrada'
-        });
+        category = await Category.findBySlug(slug)
+          .select('-__v')
+          .lean();
+        
+        if (!category) {
+          return res.status(404).json({
+            success: false,
+            message: 'Categoría no encontrada'
+          });
+        }
+        
+        categoryCache.set(cacheKey, category);
       }
 
       res.json({
@@ -231,11 +142,7 @@ static validateSlugParam(req, res, next) {
       });
 
     } catch (error) {
-      console.error('Error obteniendo categoría:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      return CategoryController.handleError(res, error, 'getCategoryBySlug');
     }
   }
 
@@ -243,21 +150,10 @@ static validateSlugParam(req, res, next) {
   static async getSubcategories(req, res) {
     try {
       const { slug } = req.params;
-
-    // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Formato de categoría inválido'
-      });
-    }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-    const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
+      
+      const category = await Category.findBySlug(slug)
+        .select('slug name subcategories')
+        .lean();
 
       if (!category) {
         return res.status(404).json({
@@ -278,92 +174,38 @@ static validateSlugParam(req, res, next) {
       });
 
     } catch (error) {
-      console.error('Error obteniendo subcategorías:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      return CategoryController.handleError(res, error, 'getSubcategories');
     }
   }
 
-  // GET /api/categories/admin/all - Obtener todas las categorías para admin
-  static async getAllCategoriesAdmin(req, res) {
-    try {
-
-      adminAuth(req, res, async () => {
-        if (!req.isAdmin) {
-          return res.status(403).json({
-            success: false,
-            message: 'Acceso denegado'
-          }); 
-      }
-    });
-
-
-    // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Formato de categoría inválido'
-      });
-    }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-    const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
-      res.json({
-        success: true,
-        data: CategoryController.athenaCategories.sort((a, b) => a.order - b.order),
-        message: 'Todas las categorías obtenidas (admin)'
-      });
-
-    } catch (error) {
-      console.error('Error obteniendo categorías (admin):', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
-    }
-  }
-
-  // GET /api/categories/sitemap - Para generar sitemap
+  // GET /api/categories/sitemap - Datos para sitemap
   static async getSitemapData(req, res) {
     try {
-
-     // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Formato de categoría inválido'
-      });
-    }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-    const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
-    // Construir datos para sitemap
-      const sitemapData = CategoryController.athenaCategories
-        .filter(cat => cat.isActive)
-        .map(cat => ({
+      const cacheKey = 'sitemap_categories';
+      let sitemapData = categoryCache.get(cacheKey);
+      
+      if (!sitemapData) {
+        const categories = await Category.findActiveOrdered()
+          .select('slug name subcategories updatedAt')
+          .lean();
+        
+        sitemapData = categories.map(cat => ({
           slug: cat.slug,
           name: cat.name,
-          lastModified: new Date().toISOString(),
+          lastModified: cat.updatedAt || new Date().toISOString(),
           priority: 0.8,
           changeFreq: 'weekly',
           subcategories: cat.subcategories.map(sub => ({
             slug: `${cat.slug}/${sub.slug}`,
             name: `${cat.name} - ${sub.name}`,
-            lastModified: new Date().toISOString(),
+            lastModified: cat.updatedAt || new Date().toISOString(),
             priority: 0.6,
             changeFreq: 'weekly'
           }))
         }));
+        
+        categoryCache.set(cacheKey, sitemapData, 86400); // Cache 24 horas
+      }
 
       res.json({
         success: true,
@@ -371,48 +213,34 @@ static validateSlugParam(req, res, next) {
       });
 
     } catch (error) {
-      console.error('Error generando sitemap de categorías:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      return CategoryController.handleError(res, error, 'getSitemapData');
     }
   }
 
-  // GET /api/categories/seo/:slug - Información SEO de categoría
+  // GET /api/categories/seo/:slug - Información SEO
   static async getCategorySEO(req, res) {
     try {
       const { slug } = req.params;
-
-              // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Formato de categoría inválido'
-      });
-    }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-    const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
       
-
+      const category = await Category.findBySlug(slug)
+        .select('slug name description image seoTitle seoDescription keywords')
+        .lean();
+      
       if (!category) {
         return res.status(404).json({
           success: false,
           message: 'Categoría no encontrada'
         });
       }
-      
 
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://athenabrand.com' 
+        : process.env.FRONTEND_URL || 'http://localhost:3000';
+      
       const seoData = {
         title: category.seoTitle || `${category.name} - ATHENA BRAND`,
         description: category.seoDescription || category.description,
         keywords: category.keywords || [],
-        canonical: this.validateDomain(FRONTEND_URL) ? `${FRONTEND_URL}/categoria/${category.slug}` : null,
         ogTitle: category.seoTitle || `${category.name} - ATHENA BRAND`,
         ogDescription: category.seoDescription || category.description,
         ogImage: category.image,
@@ -422,11 +250,11 @@ static validateSlugParam(req, res, next) {
           "name": category.name,
           "description": category.description,
           "image": category.image,
-          "url": `${process.env.FRONTEND_URL}/categoria/${category.slug}`,
+          "url": `${baseUrl}/categoria/${category.slug}`,
           "parentOrganization": {
             "@type": "Organization",
             "name": "ATHENA BRAND",
-            "url": process.env.FRONTEND_URL
+            "url": baseUrl
           }
         }
       };
@@ -437,150 +265,220 @@ static validateSlugParam(req, res, next) {
       });
 
     } catch (error) {
-      console.error('Error obteniendo SEO de categoría:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      return CategoryController.handleError(res, error, 'getCategorySEO');
     }
   }
 
-  // GET /api/categories/stats - Estadísticas de categorías
+  // GET /api/categories/stats - Estadísticas
   static async getCategoryStats(req, res) {
     try {
-
-    // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Formato de categoría inválido'
-      });
-    }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-    const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
-
-      // Esta sería una implementación más completa con datos de productos
-      const Product = require('../models/Product');
-    
-    const stats = await Promise.all(
-      CategoryController.athenaCategories
-        .filter(cat => cat.isActive)
-        .map(async (category) => {
-          // Sanitizar parámetro
-          const sanitizedSlug = category.slug.replace(/[\$\.]/g, '');
-          
-          const productCount = await Product.countDocuments({
-            category: { $eq: sanitizedSlug }, // Uso explícito de $eq
-            isActive: { $eq: true }
-          });
-
-          const avgPrice = await Product.aggregate([
-            { 
-              $match: { 
-                category: { $eq: sanitizedSlug },
-                isActive: { $eq: true }
-              } 
-            },,
-              {
-                $group: {
-                  _id: null,
-                  avgPrice: { $avg: '$price' },
-                  minPrice: { $min: '$price' },
-                  maxPrice: { $max: '$price' }
-                }
-              }
-            ]);
-
-            return {
-              category: category.name,
-              slug: category.slug,
-              productCount,
-              priceStats: avgPrice[0] || { avgPrice: 0, minPrice: 0, maxPrice: 0 }
-            };
-          })
-      );
+      const cacheKey = 'category_stats';
+      let stats = categoryCache.get(cacheKey);
+      
+      if (!stats) {
+        const categories = await Category.find({ isActive: true })
+          .select('slug name')
+          .lean();
+        
+        // TODO: Implementar conteo real de productos cuando exista el modelo
+        stats = {
+          totalCategories: categories.length,
+          categories: categories.map(cat => ({
+            category: cat.name,
+            slug: cat.slug,
+            productCount: 0, // Placeholder
+            priceStats: { 
+              avgPrice: 0, 
+              minPrice: 0, 
+              maxPrice: 0 
+            }
+          }))
+        };
+        
+        categoryCache.set(cacheKey, stats, 1800); // Cache 30 minutos
+      }
 
       res.json({
         success: true,
-        data: {
-          totalCategories: CategoryController.athenaCategories.filter(c => c.isActive).length,
-          categories: stats
-        }
+        data: stats
       });
 
     } catch (error) {
-      console.error('Error obteniendo estadísticas de categorías:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      return CategoryController.handleError(res, error, 'getCategoryStats');
     }
   }
 
-  // PUT /api/categories/:slug/toggle - Activar/desactivar categoría (admin)
+  // ============================================
+  // RUTAS ADMINISTRATIVAS
+  // ============================================
+
+  // GET /api/admin/categories - Todas las categorías (incluyendo inactivas)
+  static async getAllCategoriesAdmin(req, res) {
+    try {
+      const categories = await Category.find()
+        .sort({ order: 1 })
+        .select('-__v')
+        .lean();
+
+      res.json({
+        success: true,
+        data: categories,
+        message: 'Todas las categorías obtenidas (admin)'
+      });
+
+    } catch (error) {
+      return CategoryController.handleError(res, error, 'getAllCategoriesAdmin');
+    }
+  }
+
+  // PUT /api/admin/categories/:slug/toggle - Activar/desactivar
   static async toggleCategory(req, res) {
     try {
       const { slug } = req.params;
+      
+      const category = await Category.findOne({ slug });
 
-      adminAuth(req, res, async () => {
-        if (!req.isAdmin) {
-          return res.status(403).json({
-            success: false,
-            message: 'Acceso denegado'
-          }); 
-      }
-    });
-
-
-    // Validación de entrada
-    if (!CategoryController.validateSlug(slug)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Formato de categoría inválido'
-      });
-    }
-    
-    // Escapar para prevenir XSS
-    const sanitizedSlug = slug.replace(/[<>]/g, '');
-    
-    const category = CategoryController.athenaCategories.find(cat => 
-      cat.slug === sanitizedSlug && cat.isActive
-    );
-    // Encontrar índice de la categoría
-      const categoryIndex = CategoryController.athenaCategories.findIndex(cat => 
-        cat.slug === slug
-      );
-
-      if (categoryIndex === -1) {
+      if (!category) {
         return res.status(404).json({
           success: false,
           message: 'Categoría no encontrada'
         });
       }
 
-      CategoryController.athenaCategories[categoryIndex].isActive = 
-        !CategoryController.athenaCategories[categoryIndex].isActive;
+      // Usar método del modelo
+      await category.toggleActive();
+      
+      // Limpiar caché
+      CategoryController.clearCache();
 
       res.json({
         success: true,
-        message: `Categoría ${CategoryController.athenaCategories[categoryIndex].isActive ? 'activada' : 'desactivada'} exitosamente`,
+        message: `Categoría ${category.isActive ? 'activada' : 'desactivada'} exitosamente`,
         data: {
-          slug: CategoryController.athenaCategories[categoryIndex].slug,
-          isActive: CategoryController.athenaCategories[categoryIndex].isActive
+          slug: category.slug,
+          isActive: category.isActive
         }
       });
 
     } catch (error) {
-      console.error('Error cambiando estado de categoría:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
+      return CategoryController.handleError(res, error, 'toggleCategory');
+    }
+  }
+
+  // POST /api/admin/categories - Crear categoría
+  static async createCategory(req, res) {
+    try {
+      const category = new Category(req.body);
+      await category.save();
+      
+      // Limpiar caché
+      CategoryController.clearCache();
+
+      res.status(201).json({
+        success: true,
+        message: 'Categoría creada exitosamente',
+        data: category
       });
+
+    } catch (error) {
+      if (error.name === 'ValidationError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Datos de categoría inválidos',
+          errors: Object.values(error.errors).map(e => e.message)
+        });
+      }
+      
+      if (error.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message: 'Ya existe una categoría con ese slug'
+        });
+      }
+
+      return CategoryController.handleError(res, error, 'createCategory');
+    }
+  }
+
+  // PUT /api/admin/categories/:slug - Actualizar categoría
+  static async updateCategory(req, res) {
+    try {
+      const { slug } = req.params;
+      
+      const category = await Category.findOneAndUpdate(
+        { slug },
+        req.body,
+        { 
+          new: true, // Retornar documento actualizado
+          runValidators: true // Ejecutar validaciones
+        }
+      );
+
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message: 'Categoría no encontrada'
+        });
+      }
+
+      // Limpiar caché
+      CategoryController.clearCache();
+
+      res.json({
+        success: true,
+        message: 'Categoría actualizada exitosamente',
+        data: category
+      });
+
+    } catch (error) {
+      if (error.name === 'ValidationError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Datos de categoría inválidos',
+          errors: Object.values(error.errors).map(e => e.message)
+        });
+      }
+
+      return CategoryController.handleError(res, error, 'updateCategory');
+    }
+  }
+
+  // DELETE /api/admin/categories/:slug - Eliminar categoría
+  static async deleteCategory(req, res) {
+    try {
+      const { slug } = req.params;
+      
+      const category = await Category.findOne({ slug });
+
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message: 'Categoría no encontrada'
+        });
+      }
+
+      // TODO: Verificar si hay productos asociados
+      // const Product = require('../models/Product');
+      // const hasProducts = await Product.exists({ category: category._id });
+      // if (hasProducts) {
+      //   return res.status(400).json({
+      //     success: false,
+      //     message: 'No se puede eliminar una categoría con productos asociados'
+      //   });
+      // }
+
+      await category.remove();
+      
+      // Limpiar caché
+      CategoryController.clearCache();
+
+      res.json({
+        success: true,
+        message: 'Categoría eliminada exitosamente'
+      });
+
+    } catch (error) {
+      return CategoryController.handleError(res, error, 'deleteCategory');
     }
   }
 }

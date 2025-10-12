@@ -4,7 +4,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const adminRoutes = require('./routes/admin');
+const adminRoutes = require('./routes/admin/user');
+const categoriesRoutes = require('./routes/admin/categories');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
@@ -136,11 +137,15 @@ const categoryRoutes = require('./routes/categories');
 
 // Usar rutas
 app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
+
+//rutas administrativas
+app.use('/api/admin/categories', categoriesRoutes);
+app.use('/api/admin/user', adminRoutes);
+
 
 // Información de la API
 app.get('/api', (req, res) => {
