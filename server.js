@@ -5,7 +5,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const adminRoutes = require('./routes/admin/user');
-const categoriesRoutes = require('./routes/admin/categories');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
@@ -135,6 +134,7 @@ const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/order');
 const uploadRoutes = require('./routes/upload');
 const categoryRoutes = require('./routes/categories');
+const adminCategoryRoutes = require('./routes/admin/categories');
 
 // Usar rutas
 app.use('/api/auth', authRoutes);
@@ -142,10 +142,10 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/admin/categories', adminCategoryRoutes);
 
 //rutas administrativas
 app.use('/api/admin', adminRouter);
-app.use('/api/admin/categories', categoriesRoutes);
 app.use('/api/admin/user', adminRouter);
 
 

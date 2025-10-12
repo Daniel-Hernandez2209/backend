@@ -1,16 +1,11 @@
 // routes/categories.js - Rutas públicas
 const express = require('express');
-const CategoryController = require('../controllers/categoryController');
-const { default: rateLimit } = require('express-rate-limit');
-const  { categoryRateLimit, heavyReadLimiter, seoLimiter } = require('../middleware/security');
-const { publicReadLimiter } = require('../middleware/rateLimiter');
-
 const router = express.Router();
-
-app.use(rateLimit)
+const CategoryController = require('../controllers/categoryController');
+const { publicRateLimit } = require('../middleware/rateLimiter');
 
 // Rutas públicas ordenadas correctamente
-router.get('/', CategoryController.getAllCategories, categoryRateLimit);
+router.get('/', publicRateLimit, CategoryController.getAllCategories);
 router.get('/menu', CategoryController.getMenuCategories, categoryRateLimit);
 router.get('/sitemap', CategoryController.getSitemapData, categoryRateLimit);
 router.get('/stats', CategoryController.getCategoryStats, heavyReadLimiter);
