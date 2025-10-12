@@ -55,7 +55,8 @@
     "sharp": "^0.33.5",
     "slugify": "^1.6.6",
     "stripe": "^14.9.0",
-    "winston": "^3.18.3"
+    "winston": "^3.18.3",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "eslint": "^8.55.0",
