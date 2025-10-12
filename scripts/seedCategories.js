@@ -1,6 +1,6 @@
 // scripts/seedCategories.js
 const mongoose = require('mongoose');
-const Category = require('../models/Category');
+const Category = require('../models/category');
 require('dotenv').config();
 
 // Datos originales de las categorías

@@ -7,7 +7,7 @@ const { adminWriteLimiter } = require('../../middleware/rateLimiter');
 const router = express.Router();
 
 // Sub-routers
-const usersRouter = require('./users');
+const usersRouter = require('./user');
 const categoriesRouter = require('./categories');
 
 // Aplicar auth global a todas las rutas admin
