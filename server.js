@@ -10,6 +10,7 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
 const connectDB = require('./db');
+const adminRouter = require('./routes/admin');
 require('dotenv').config();
 
 const app = express();
@@ -143,8 +144,9 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
 
 //rutas administrativas
+app.use('/api/admin', adminRouter);
 app.use('/api/admin/categories', categoriesRoutes);
-app.use('/api/admin/user', adminRoutes);
+app.use('/api/admin/user', adminRouter);
 
 
 // Información de la API

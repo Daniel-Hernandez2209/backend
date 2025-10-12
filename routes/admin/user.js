@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { auth, adminAuth } = require('../../middleware/auth');
 const rateLimit = require('express-rate-limit');
-const AdminController = require('../controllers/authController');
+const AdminController = require('../controllers/adminController');
 
 // Rate limiter para admin
 const adminLimiter = rateLimit({

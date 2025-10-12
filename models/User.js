@@ -1,6 +1,7 @@
 // models/User.js - Modelo de usuarios para ATHENA BRAND
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
   email: {
@@ -232,7 +233,6 @@ userSchema.methods.removeFromWishlist = function(productId) {
 
 // Método para generar token de verificación
 userSchema.methods.generateVerificationToken = function() {
-  const crypto = require('crypto');
   const token = crypto.randomBytes(32).toString('hex');
   
   this.verificationToken = token;
@@ -243,7 +243,6 @@ userSchema.methods.generateVerificationToken = function() {
 
 // Método para generar token de reset de contraseña
 userSchema.methods.generatePasswordResetToken = function() {
-  const crypto = require('crypto');
   const token = crypto.randomBytes(32).toString('hex');
   
   this.passwordResetToken = token;
