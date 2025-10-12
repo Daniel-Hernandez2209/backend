@@ -1,5 +1,5 @@
 // controllers/categoryController.js - VERSIÓN CON MONGODB
-const Category = require('../models/Category');
+const Category = require('../models/category');
 const logger = require('../utils/logger');
 const NodeCache = require('node-cache');
 

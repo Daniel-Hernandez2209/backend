@@ -72,7 +72,7 @@ class AuthController {
       });
 
       // Generar token de verificación
-      const verificationToken = user.generateVerificationToken();
+      const verificationToken = user.generateTokenPair();
       
       await user.save();
 
@@ -94,7 +94,7 @@ class AuthController {
       }
 
       // Generar JWT
-      const token = generateToken(user._id);
+      const token = generateTokenPair(user._id);
 
       // Respuesta sin datos sensibles
       const userResponse = createUserResponse(user);
@@ -405,7 +405,7 @@ allowedUpdates.forEach(field => {
         });
       }
 
-      const newToken = generateToken(user._id);
+      const newToken = generateTokenPair(user._id);
 
       res.json({
         success: true,
