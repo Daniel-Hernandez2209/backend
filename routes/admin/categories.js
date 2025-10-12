@@ -2,7 +2,7 @@
 const express = require('express');
 const CategoryController = require('../../controllers/categoryController');
 const { adminAuth } = require('../../middleware/auth');
-const { adminWriteLimiter , criticalAdminLimiter } = require('../../middleware/rateLimiter');
+const { adminWriteLimiter, criticalAdminLimiter } = require('../../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -10,17 +10,17 @@ const router = express.Router();
 router.use(adminAuth);
 
 // Rutas admin (ya protegidas por el middleware arriba)
-router.get('/', CategoryController.getAllCategoriesAdmin, adminWriteLimiter);
+router.get('/', adminWriteLimiter, CategoryController.getAllCategoriesAdmin);
 
 router.put('/:slug/toggle', 
     criticalAdminLimiter, // Rate limiter más restrictivo
-  CategoryController.validateSlugParam,
-  CategoryController.toggleCategory
+    CategoryController.validateSlugParam,
+    CategoryController.toggleCategory
 );
 
 // Futuras rutas admin
-router.post('/', CategoryController.createCategory, criticalAdminLimiter); // Por implementar
-router.put('/:slug', CategoryController.updateCategory, criticalAdminLimiter); // Por implementar
-router.delete('/:slug', CategoryController.deleteCategory, criticalAdminLimiter); // Por implementar
+router.post('/', criticalAdminLimiter, CategoryController.createCategory);
+router.put('/:slug', criticalAdminLimiter, CategoryController.updateCategory);
+router.delete('/:slug', criticalAdminLimiter, CategoryController.deleteCategory);
 
 module.exports = router;
