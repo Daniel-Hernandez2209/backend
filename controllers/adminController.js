@@ -1,12 +1,10 @@
 // controllers/adminController.js - Controlador de administración para ATHENA BRAND
 const User = require('../models/User');
 const logger = require('../utils/logger');
-const mongoose = require('mongoose');
 
-class AdminController {
-  
+const AdminController = {
   // Helper para manejo de errores
-  static handleError(res, error, context) {
+  handleError(res, error, context) {
     logger.error(`Error en ${context}`, { 
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
@@ -16,19 +14,19 @@ class AdminController {
       success: false,
       message: 'Error interno del servidor'
     });
-  }
+  },
 
   // Helper para validar ObjectId
-  static isValidObjectId(id) {
+  isValidObjectId(id) {
     return mongoose.Types.ObjectId.isValid(id);
-  }
+  },
 
   // ============================================
   // GESTIÓN DE USUARIOS
   // ============================================
 
   // GET /api/admin/users - Obtener todos los usuarios
-  static async getUsers(req, res) {
+  getUsers: async (req, res) => {
     try {
       // Parámetros de paginación y filtrado
       const page = parseInt(req.query.page) || 1;
@@ -100,10 +98,10 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'getUsers');
     }
-  }
+  },
 
   // GET /api/admin/users/:id - Obtener usuario específico
-  static async getUserById(req, res) {
+  getUserById: async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -146,10 +144,10 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'getUserById');
     }
-  }
+  },
 
   // PUT /api/admin/users/:id - Actualizar usuario
-  static async updateUser(req, res) {
+  updateUser: async (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -252,10 +250,10 @@ class AdminController {
 
       return AdminController.handleError(res, error, 'updateUser');
     }
-  }
+  },
 
   // DELETE /api/admin/users/:id - Eliminar usuario (soft delete)
-  static async deleteUser(req, res) {
+  deleteUser: async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -320,10 +318,10 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'deleteUser');
     }
-  }
+  },
 
   // PUT /api/admin/users/:id/activate - Activar/desactivar usuario
-  static async toggleUserStatus(req, res) {
+  toggleUserStatus: async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -393,14 +391,14 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'toggleUserStatus');
     }
-  }
+  },
 
   // ============================================
   // ESTADÍSTICAS
   // ============================================
 
   // GET /api/admin/stats - Estadísticas del sistema
-  static async getStats(req, res) {
+  getStats: async (req, res) => {
     try {
       const timeRange = req.query.range || '30d'; // 7d, 30d, 90d, 1y
       
@@ -516,14 +514,14 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'getStats');
     }
-  }
+  },
 
   // ============================================
   // ACCIONES ADICIONALES
   // ============================================
 
   // PUT /api/admin/users/:id/verify - Verificar manualmente un usuario
-  static async verifyUser(req, res) {
+  verifyUser: async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -564,10 +562,10 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'verifyUser');
     }
-  }
+  },
 
   // PUT /api/admin/users/:id/unlock - Desbloquear cuenta
-  static async unlockUser(req, res) {
+  unlockUser: async (req, res) => {
     try {
       const { id } = req.params;
 
@@ -599,10 +597,10 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'unlockUser');
     }
-  }
+  },
 
   // PUT /api/admin/users/:id/role - Cambiar rol de usuario
-  static async changeUserRole(req, res) {
+  changeUserRole: async (req, res) => {
     try {
       const { id } = req.params;
       const { role } = req.body;
@@ -665,10 +663,10 @@ class AdminController {
     } catch (error) {
       return AdminController.handleError(res, error, 'changeUserRole');
     }
-  }
+  },
 
   // GET /api/admin/users/export - Exportar usuarios a CSV
-  static async exportUsers(req, res) {
+  exportUsers: async (req, res) => {
     try {
       const users = await User.find()
         .select('firstName lastName email role isActive isVerified createdAt totalOrders totalSpent')

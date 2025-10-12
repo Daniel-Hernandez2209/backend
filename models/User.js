@@ -4,150 +4,33 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
   email: {
     type: String,
-    required: [true, 'El email es requerido'],
+    required: true,
     unique: true,
-    lowercase: true,
     trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Email no válido']
+    lowercase: true
   },
-  
   password: {
     type: String,
-    required: [true, 'La contraseña es requerida'],
-    minlength: [6, 'La contraseña debe tener al menos 6 caracteres'],
-    select: false // No incluir por defecto en consultas
+    required: true
   },
-  
-  firstName: {
-    type: String,
-    required: [true, 'El nombre es requerido'],
-    trim: true,
-    maxlength: [50, 'El nombre no puede exceder 50 caracteres']
-  },
-  
-  lastName: {
-    type: String,
-    required: [true, 'El apellido es requerido'],
-    trim: true,
-    maxlength: [50, 'El apellido no puede exceder 50 caracteres']
-  },
-  
-  phone: {
-    type: String,
-    trim: true,
-    match: [/^[+]?[\d\s\-\(\)]+$/, 'Número de teléfono no válido']
-  },
-  
-  // Dirección principal
-  address: {
-    street: {
-      type: String,
-      trim: true,
-      maxlength: [200, 'La dirección no puede exceder 200 caracteres']
-    },
-    city: {
-      type: String,
-      trim: true,
-      maxlength: [100, 'La ciudad no puede exceder 100 caracteres']
-    },
-    department: {
-      type: String,
-      trim: true,
-      maxlength: [100, 'El departamento no puede exceder 100 caracteres']
-    },
-    zipCode: {
-      type: String,
-      trim: true,
-      maxlength: [10, 'El código postal no puede exceder 10 caracteres']
-    },
-    country: {
-      type: String,
-      trim: true,
-      default: 'Colombia',
-      maxlength: [50, 'El país no puede exceder 50 caracteres']
-    }
-  },
-  
-  // Múltiples direcciones para envío
-  shippingAddresses: [{
-    name: String, // Ej: "Casa", "Oficina"
-    street: String,
-    city: String,
-    department: String,
-    zipCode: String,
-    country: { type: String, default: 'Colombia' },
-    isDefault: { type: Boolean, default: false }
-  }],
-  
-  // Información adicional
-  birthDate: Date,
-  gender: {
-    type: String,
-    enum: ['masculino', 'femenino', 'otro', 'prefiero_no_decir']
-  },
-  
-  // Preferencias
-  preferences: {
-    newsletter: { type: Boolean, default: true },
-    smsMarketing: { type: Boolean, default: false },
-    favoriteCategories: [String],
-    size: {
-      type: String,
-      enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
-    }
-  },
-  
-  // Sistema de roles
   role: {
     type: String,
-    enum: ['customer', 'admin', 'moderator'],
-    default: 'customer'
+    enum: ['user', 'admin'],
+    default: 'user'
   },
-  
-  // Estado de la cuenta
   isActive: {
     type: Boolean,
     default: true
-  },
-  
-  isVerified: {
-    type: Boolean,
-    default: false
-  },
-  
-  // Tokens para verificación y reseteo
-  verificationToken: String,
-  verificationTokenExpires: Date,
-  passwordResetToken: String,
-  passwordResetExpires: Date,
-  
-  // Tracking de actividad
-  lastLogin: Date,
-  loginAttempts: { type: Number, default: 0 },
-  lockUntil: Date,
-  
-  // Wishlist - productos favoritos
-  wishlist: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product'
-  }],
-  
-  // Historial de compras (referencia)
-  totalOrders: { type: Number, default: 0 },
-  totalSpent: { type: Number, default: 0 },
-  
-  // Avatar del usuario
-  avatar: {
-    url: String,
-    cloudinaryId: String
   }
-  
 }, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  timestamps: true
 });
 
 // Índices para optimización
