@@ -110,4 +110,31 @@ class CategoryController {
       isActive: true,
       order: 4,
       seoTitle: 'Hoodies y Sacos - ATHENA BRAND | Sudaderas Colombia',
-      seo
+      seo Description: 'Explora nuestra colección de hoodies y sacos. Sudaderas cómodas y con estilo para cualquier ocasión. Streetwear auténtico.',
+      keywords: ['hoodies', 'sacos', 'sudaderas colombia', 'streetwear sudaderas', 'ropa urbana']
+    }, 
+    {
+      // Categoría de chaquetas
+      slug: 'chaquetas',  
+      name: 'CHAQUETAS',
+      description: 'Chaquetas y abrigos para todas las estaciones. Estilo y funcionalidad en una sola prenda.',
+      image: '/uploads/categories/chaquetas-banner.jpg',
+      subcategories: [
+        { name: 'Chaquetas ligeras', slug: 'chaquetas-ligeras', description: 'Para clima templado' },
+        { name: 'Chaquetas de invierno', slug: 'chaquetas-invierno', description: 'Abrigos cálidos' },
+        { name: 'Cazadoras', slug: 'cazadoras', description: 'Estilo casual' },
+        { name: 'Chaquetas impermeables', slug: 'chaquetas-impermeables', description: 'Protección contra la lluvia' },
+        { name: 'Chaquetas de cuero', slug: 'chaquetas-cuero', description: 'Estilo atemporal' }
+      ],  
+      isActive: true,
+      order: 5,
+      seoTitle: 'Chaquetas - ATHENA BRAND | Abrigos y Cazadoras Colombia',
+      seoDescription: 'Descubre nuestra selección de chaquetas y abrigos. Perfectas para cualquier estación. Estilo y funcionalidad en cada prenda.',
+      keywords: ['chaquetas', 'abrigos', 'cazadoras', 'chaquetas invierno', 'ropa exterior']
+    }
+  ];  
+}
+
+// Exportación del controlador para su uso en rutas
+module.exports = CategoryController;
+ `;

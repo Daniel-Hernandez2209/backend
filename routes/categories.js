@@ -2,12 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const CategoryController = require('../controllers/categoryController');
-const { publicRateLimit } = require('../middleware/rateLimiter');
+const {   publicReadLimiter,
+  heavyReadLimiter,
+  seoLimiter } = require('../middleware/rateLimiter');
 
 // Rutas públicas ordenadas correctamente
-router.get('/', publicRateLimit, CategoryController.getAllCategories);
-router.get('/menu', CategoryController.getMenuCategories, categoryRateLimit);
-router.get('/sitemap', CategoryController.getSitemapData, categoryRateLimit);
+router.get('/', publicReadLimiter, CategoryController.getAllCategories);
+router.get('/menu', CategoryController.getMenuCategories, publicReadLimiter);
+router.get('/sitemap', CategoryController.getSitemapData, publicReadLimiter);
 router.get('/stats', CategoryController.getCategoryStats, heavyReadLimiter);
 
 router.get('/seo/:slug', 
