@@ -5,8 +5,9 @@ const User = require('../models/User');
 const sendEmail = require('../utils/sendEmail');
 const logger = require('../utils/logger');
 const bcrypt = require('bcrypt');
-const redis = require('redis');
-const client = redis.createClient();
+const crypto = require('crypto');
+const { Redis} = require('@upstash/redis');
+const redis = Redis.fromEnv();
 const validator = require('validator');
 const xss = require('xss');
 
@@ -19,8 +20,10 @@ const generateTokenPair = async (userId) => {
   const refreshToken = crypto.randomBytes(40).toString('hex');
   
   // Guardar refresh token en Redis con expiración
-  await client.setex(`refresh_token:${userId}`, 604800, refreshToken); // 7 días
-  
+  await redis.setex(`refresh_token:${userId}`, 604800, refreshToken); // 7 días
+  //indice inverso para buscar userId por refreshToken
+  await redis.setex(`rt:${refreshToken}`, 604800, userId); // 7 días
+
   return { accessToken, refreshToken };
 };
 // Función para crear respuesta de usuario limpia
@@ -37,6 +40,48 @@ const createUserResponse = (user) => {
 };
 
 class AuthController {
+
+static async refreshToken(req, res) {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ success: false, message: 'Refresh token requerido' });
+    }
+
+    // ✅ Obtener userId directamente desde el índice inverso
+    const userId = await redis.get(`rt:${refreshToken}`);
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Refresh token inválido o expirado' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user || !user.isActive) {
+      // Opcional: limpiar token huérfano
+      await redis.del(`rt:${refreshToken}`);
+      return res.status(401).json({ success: false, message: 'Usuario no válido' });
+    }
+
+    // Generar nuevos tokens
+    const newTokens = await generateTokenPair(user._id);
+
+    // Opcional: eliminar el refresh token antiguo (mejor seguridad)
+    await redis.del(`rt:${refreshToken}`);
+    await redis.del(`refresh_token:${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Token renovado',
+      token: newTokens
+    });
+
+  } catch (error) {
+    logger.error('Error en refreshToken:', error);
+    res.status(500).json({ success: false, message: 'Error interno' });
+  }
+}
+
+
   // POST /api/auth/register - Registro de usuario
   static async register(req, res) {
     try {
@@ -72,7 +117,7 @@ class AuthController {
       });
 
       // Generar token de verificación
-      const verificationToken = user.generateTokenPair();
+      const verificationToken = user.generateVerificationToken();
       
       await user.save();
 
@@ -107,18 +152,17 @@ class AuthController {
       });
 
     } catch (error) {
-      console.error('Error en registro:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
-    }
-          // Log interno sin exposición
+       // Log interno sin exposición al cliente
       logger.error('Error en registro:', {
-        error: error.message,
-        stack: error.stack,
-        userId: req.userId
-      });
+            error: error.message,
+            stack: error.stack,
+            userId: req.userId
+          });
+            return res.status(500).json({
+              success: false,
+              message: 'Error interno del servidor'
+            });
+    }
   }
 
   // POST /api/auth/login - Login de usuario
@@ -132,13 +176,23 @@ class AuthController {
     const passwordToCheck = user ? user.password : dummyHash;
     
     const isPasswordValid = await bcrypt.compare(password, passwordToCheck);
-    
+    // Si no existe usuario o la contraseña es inválida
     if (!user || !isPasswordValid) {
       return res.status(401).json({
         success: false,
         message: 'Credenciales inválidas'
       });
     }
+        const token = await generateTokenPair(user._id);
+    const userResponse = createUserResponse(user);
+
+    // Respuesta exitosa
+    return res.json({
+      success: true,
+      message: 'Inicio de sesión exitoso',
+      token,
+      user: userResponse
+    });
 
     } catch (error) {
       console.error('Error en login:', error);
@@ -386,41 +440,29 @@ allowedUpdates.forEach(field => {
   }
 
   // POST /api/auth/logout - Logout
-  static async logout(req, res) {
-    res.json({
-      success: true,
-      message: 'Logout exitoso'
-    });
-  }
-
-  // POST /api/auth/refresh-token - Renovar token (opcional)
-  static async refreshToken(req, res) {
-    try {
-      const user = await User.findById(req.userId);
-      
-      if (!user || !user.isActive) {
-        return res.status(401).json({
-          success: false,
-          message: 'Usuario no válido para renovar token'
-        });
-      }
-
-      const newToken = generateTokenPair(user._id);
-
-      res.json({
-        success: true,
-        message: 'Token renovado exitosamente',
-        token: newToken
-      });
-
-    } catch (error) {
-      console.error('Error renovando token:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+   static async logout(req, res) {
+  try {
+    if (!req.userId) {
+      return res.status(400).json({ success: false, message: 'Usuario no autenticado' });
     }
+    const userId = req.userId;
+    
+    // Obtener el refresh token actual (si lo guardaste en el login)
+    const currentRefreshToken = await redis.get(`refresh_token:${userId}`);
+    
+    if (currentRefreshToken) {
+      await redis.del(`rt:${currentRefreshToken}`);
+    }
+    
+    await redis.del(`refresh_token:${userId}`);
+
+    res.json({ success: true, message: 'Sesión cerrada correctamente' });
+  } catch (error) {
+    logger.error('Error en logout:', error);
+    res.status(500).json({ success: false, message: 'Error al cerrar sesión' });
   }
+}
+  
 
   // POST /api/auth/change-password - Cambiar contraseña (usuario logueado)
   static async changePassword(req, res) {

@@ -32,6 +32,7 @@
   "author": "Daniel Hernandez - ATHENA BRAND",
   "license": "ISC",
   "dependencies": {
+    "@upstash/redis": "^1.35.6",
     "axios": "^1.6.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",

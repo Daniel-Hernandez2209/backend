@@ -4,22 +4,43 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
-  name: {
+  // Datos personales
+  firstName: {
     type: String,
-    required: true,
-    trim: true
+    required: [true, 'El nombre es requerido'],
+    trim: true,
+    maxlength: [50, 'El nombre no puede exceder 50 caracteres']
+  },
+  lastName: {
+    type: String,
+    required: [true, 'El apellido es requerido'],
+    trim: true,
+    maxlength: [50, 'El apellido no puede exceder 50 caracteres']
   },
   email: {
     type: String,
-    required: true,
+    required: [true, 'El email es requerido'],
     unique: true,
     trim: true,
-    lowercase: true
+    lowercase: true,
+    match: [/^\S+@\S+\.\S+$/, 'Email inválido']
   },
   password: {
     type: String,
-    required: true
+    required: [true, 'La contraseña es requerida'],
+    minlength: 6,
+    select: false // Nunca se devuelve por defecto
   },
+  phone: {
+    type: String,
+    trim: true
+  },
+  address: {
+    type: String,
+    trim: true
+  },
+
+  // Seguridad y estado
   role: {
     type: String,
     enum: ['user', 'admin'],
@@ -28,33 +49,67 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
-  }
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+
+  // Intentos de login
+  loginAttempts: {
+    type: Number,
+    default: 0
+  },
+  lockUntil: {
+    type: Date
+  },
+
+  // Tokens de verificación y recuperación
+  verificationToken: {
+    type: String,
+    select: false
+  },
+  verificationTokenExpires: {
+    type: Date,
+    select: false
+  },
+  passwordResetToken: {
+    type: String,
+    select: false
+  },
+  passwordResetExpires: {
+    type: Date,
+    select: false
+  },
+
+  // Wishlist (referencias a productos)
+  wishlist: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product'
+  }]
 }, {
   timestamps: true
 });
 
-// Índices para optimización
+// Índices
 userSchema.index({ role: 1, isActive: 1 });
-userSchema.index({ verificationToken: 1 });
-userSchema.index({ passwordResetToken: 1 });
+userSchema.index({ verificationToken: 1, verificationTokenExpires: 1 });
+userSchema.index({ passwordResetToken: 1, passwordResetExpires: 1 });
+userSchema.index({ email: 1 });
 
-// Virtual para nombre completo
+// Virtuals
 userSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 
-// Virtual para verificar si la cuenta está bloqueada
 userSchema.virtual('isLocked').get(function() {
   return !!(this.lockUntil && this.lockUntil > Date.now());
 });
 
-// Hash password antes de guardar
+// Pre-save: hash password
 userSchema.pre('save', async function(next) {
-  // Solo hash si la contraseña fue modificada
   if (!this.isModified('password')) return next();
-  
   try {
-    // Hash password con cost de 12
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
     next();
@@ -63,18 +118,12 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-// Método para comparar contraseñas
+// Métodos de instancia
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  try {
-    return await bcrypt.compare(candidatePassword, this.password);
-  } catch (error) {
-    throw error;
-  }
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Método para incrementar intentos de login fallidos
 userSchema.methods.incrementLoginAttempts = function() {
-  // Si ya tenemos un previous lock que ha expirado, restart at 1
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return this.updateOne({
       $unset: { lockUntil: 1 },
@@ -83,23 +132,18 @@ userSchema.methods.incrementLoginAttempts = function() {
   }
   
   const updates = { $inc: { loginAttempts: 1 } };
-  
-  // Si llegamos al máximo de intentos y no estamos bloqueados, bloquear
   if (this.loginAttempts + 1 >= 5 && !this.isLocked) {
-    updates.$set = { lockUntil: Date.now() + (30 * 60 * 1000) }; // 30 minutos
+    updates.$set = { lockUntil: Date.now() + (30 * 60 * 1000) };
   }
-  
   return this.updateOne(updates);
 };
 
-// Método para resetear intentos de login
 userSchema.methods.resetLoginAttempts = function() {
   return this.updateOne({
     $unset: { loginAttempts: 1, lockUntil: 1 }
   });
 };
 
-// Método para agregar producto a wishlist
 userSchema.methods.addToWishlist = function(productId) {
   if (!this.wishlist.includes(productId)) {
     this.wishlist.push(productId);
@@ -108,37 +152,29 @@ userSchema.methods.addToWishlist = function(productId) {
   return Promise.resolve(this);
 };
 
-// Método para remover producto de wishlist
 userSchema.methods.removeFromWishlist = function(productId) {
   this.wishlist.pull(productId);
   return this.save();
 };
 
-// Método para generar token de verificación
 userSchema.methods.generateVerificationToken = function() {
   const token = crypto.randomBytes(32).toString('hex');
-  
   this.verificationToken = token;
-  this.verificationTokenExpires = Date.now() + (24 * 60 * 60 * 1000); // 24 horas
-  
+  this.verificationTokenExpires = Date.now() + (24 * 60 * 60 * 1000); // 24h
   return token;
 };
 
-// Método para generar token de reset de contraseña
 userSchema.methods.generatePasswordResetToken = function() {
   const token = crypto.randomBytes(32).toString('hex');
-  
   this.passwordResetToken = token;
-  this.passwordResetExpires = Date.now() + (10 * 60 * 1000); // 10 minutos
-  
+  this.passwordResetExpires = Date.now() + (10 * 60 * 1000); // 10m
   return token;
 };
 
-// Método estático para buscar usuarios
+// Método estático
 userSchema.statics.findByEmail = function(email) {
   return this.findOne({ email: email.toLowerCase() });
 };
 
 const User = mongoose.model('User', userSchema);
-
 module.exports = User;
