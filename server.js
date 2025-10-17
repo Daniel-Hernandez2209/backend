@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
 const connectDB = require('./db');
 const adminRouter = require('./routes/admin');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
@@ -145,8 +146,8 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/admin/categories', adminCategoryRoutes);
 
 //rutas administrativas
-app.use('/api/admin', adminRouter);
-app.use('/api/admin/user', adminRouter);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/user', adminRoutes);
 
 app.get('/debug/token', (req, res) => {
   // ⚠️ ¡ELIMINA ESTE ENDPOINT ANTES DE PRODUCCIÓN!
