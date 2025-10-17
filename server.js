@@ -148,7 +148,19 @@ app.use('/api/admin/categories', adminCategoryRoutes);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/user', adminRouter);
 
-
+app.get('/debug/token', (req, res) => {
+  // ⚠️ ¡ELIMINA ESTE ENDPOINT ANTES DE PRODUCCIÓN!
+  try {
+    const token = jwt.sign(
+      { userId: "68f258f2548ae7aa9c3489ef" }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: '15m' }
+    );
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // Información de la API
 app.get('/api', (req, res) => {
   res.json({
