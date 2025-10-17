@@ -95,7 +95,6 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ role: 1, isActive: 1 });
 userSchema.index({ verificationToken: 1, verificationTokenExpires: 1 });
 userSchema.index({ passwordResetToken: 1, passwordResetExpires: 1 });
-userSchema.index({ email: 1 });
 
 // Virtuals
 userSchema.virtual('fullName').get(function() {
