@@ -16,7 +16,7 @@ const authLimiter = rateLimit({
 // Middleware de autenticación básico
 const auth = async (req, res, next) => {
   try {
-    
+      console.log('🔍 Headers recibidos:', req.headers);
     let token = req.headers.authorization || req.header('Authorization');
 
     // Verificar si existe el token
@@ -44,7 +44,7 @@ const auth = async (req, res, next) => {
       throw new Error('JWT_SECRET no está configurado');
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        
+           console.log('✅ Token decodificado:', decoded); // <-- AGREGA ESTO
     // Buscar usuario
     // Validar que userId es un string válido de ObjectId
       if (!decoded.userId || typeof decoded.userId !== 'string') {
