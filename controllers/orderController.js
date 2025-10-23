@@ -2,8 +2,10 @@
 const { validationResult } = require('express-validator');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
-const User = require('../models/User');
+const logger = require('winston');
+const crypto = require('crypto')
 const sendEmail = require('../utils/sendEmail');
+const {query} = require (express-validator)
 
 class OrderController {
   // POST /api/orders - Crear nuevo pedido
@@ -28,6 +30,8 @@ class OrderController {
           message: 'Información de contacto requerida para compras como invitado'
         });
       }
+      const accessToken = crypto.randomBytes(32).toString('hex');
+      orderData.guestAccessToken = crypto.createHash('sha256').update(accessToken).digest('hex');
 
       // Validar productos y calcular precios
       let orderItems = [];
@@ -67,7 +71,8 @@ class OrderController {
           size: item.size,
           quantity: item.quantity,
           unitPrice,
-          subtotal: itemSubtotal
+          subtotal: itemSubtotal,
+          token : accessToken
         });
 
         subtotal += itemSubtotal;
@@ -151,11 +156,11 @@ class OrderController {
       });
 
     } catch (error) {
-      console.error('Error creando pedido:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+      logger.error('Error creando pedido', { 
+        orderId: order?._id, 
+        userId: req.userId,
+        timestamp: new Date().toISOString()
+        
       });
     }
   }
@@ -188,10 +193,11 @@ class OrderController {
       });
 
     } catch (error) {
-      console.error('Error obteniendo pedidos:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
+      logger.error('Error creando pedido', { 
+        orderId: order?._id, 
+        userId: req.userId,
+        timestamp: new Date().toISOString()
+        
       });
     }
   }
@@ -221,14 +227,23 @@ class OrderController {
       }
 
       // Si no hay usuario autenticado, verificar que sea el email correcto (para invitados)
-      if (!req.userId && req.query.email) {
-        if (order.guestInfo?.email !== req.query.email) {
-          return res.status(403).json({
-            success: false,
-            message: 'No autorizado para ver este pedido'
-          });
-        }
-      }
+if (!req.userId) {
+  const { token } = req.query;
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Token de acceso requerido'
+    });
+  }
+  
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+  if (order.guestAccessToken !== hashedToken) {
+    return res.status(403).json({
+      success: false,
+      message: 'Token inválido'
+    });
+  }
+}
 
       res.json({
         success: true,
@@ -334,15 +349,8 @@ class OrderController {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 20;
       const skip = (page - 1) * limit;
-      const status = req.query.status;
-      const search = req.query.search;
-
-      // Construir query
-      let query = {};
-      
-      if (status && status !== 'all') {
-        query.status = status;
-      }
+       query('status').optional().isIn(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']),
+       query('search').optional().isLength({min: 1, max: 100}).escape()
 
       let orders;
       let total;
@@ -491,10 +499,11 @@ class OrderController {
       });
 
     } catch (error) {
-      console.error('Error obteniendo estadísticas:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
+      logger.error('Error creando pedido', { 
+        orderId: order?._id, 
+        userId: req.userId,
+        timestamp: new Date().toISOString()
+        
       });
     }
   }

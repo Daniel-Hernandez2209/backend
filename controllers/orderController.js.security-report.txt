@@ -89,7 +89,7 @@ if (!req.userId) {
     });
   }
 }
-```
+```<<aqui voy>>
 
 ### 4. **VALIDACIÓN DE ENTRADA INSUFICIENTE** - Líneas 149, 158, 161
 **Ubicación:** Parámetros sin validación
