@@ -3,6 +3,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const OrderController = require('../controllers/orderController');
 const { auth, adminAuth, optionalAuth } = require('../middleware/auth');
+const { default: rateLimit } = require('express-rate-limit');
 
 const router = express.Router();
 
@@ -57,7 +58,7 @@ const updateStatusValidation = [
 ];
 
 // Rutas públicas y protegidas opcionalmente
-router.post('/', optionalAuth, createOrderValidation, OrderController.createOrder);
+router.post('/', optionalAuth, createOrderValidation, rateLimit,OrderController.createOrder);
 router.get('/:orderNumber', optionalAuth, OrderController.getOrderByNumber);
 router.post('/:orderNumber/payment/confirm', OrderController.confirmPayment);
 

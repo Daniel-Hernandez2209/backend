@@ -1,17 +1,16 @@
 // controllers/orderController.js - Controlador de pedidos para ATHENA BRAND
-const { validationResult } = require('express-validator');
+const { validationResult, query } = require('express-validator');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
-const logger = require('winston');
-const crypto = require('crypto')
+const logger = require('../config/logger'); 
+const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail');
-const {query} = require (express-validator)
+const mongoose = require('mongoose');
 
 class OrderController {
   // POST /api/orders - Crear nuevo pedido
   static async createOrder(req, res) {
     try {
-      // Verificar errores de validación
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -23,23 +22,18 @@ class OrderController {
 
       const { items, shippingAddress, payment, notes, guestInfo } = req.body;
 
-      // Si no hay usuario autenticado, debe ser compra de invitado
       if (!req.userId && !guestInfo) {
         return res.status(400).json({
           success: false,
           message: 'Información de contacto requerida para compras como invitado'
         });
       }
-      const accessToken = crypto.randomBytes(32).toString('hex');
-      orderData.guestAccessToken = crypto.createHash('sha256').update(accessToken).digest('hex');
 
-      // Validar productos y calcular precios
       let orderItems = [];
       let subtotal = 0;
 
       for (let item of items) {
         const product = await Product.findById(item.product);
-        
         if (!product || !product.isActive) {
           return res.status(400).json({
             success: false,
@@ -47,7 +41,6 @@ class OrderController {
           });
         }
 
-        // Verificar stock
         const sizeStock = product.sizes.find(s => s.size === item.size);
         if (!sizeStock || sizeStock.stock < item.quantity) {
           return res.status(400).json({
@@ -56,7 +49,6 @@ class OrderController {
           });
         }
 
-        // Calcular precio unitario (con descuento si aplica)
         const unitPrice = product.discountPrice || product.price;
         const itemSubtotal = unitPrice * item.quantity;
 
@@ -71,62 +63,69 @@ class OrderController {
           size: item.size,
           quantity: item.quantity,
           unitPrice,
-          subtotal: itemSubtotal,
-          token : accessToken
+          subtotal: itemSubtotal
         });
 
         subtotal += itemSubtotal;
       }
 
-      // Calcular costos de envío
       const shippingCost = OrderController.calculateShippingCost(subtotal, shippingAddress);
-      
-      // Calcular impuestos (IVA 19% solo en algunos productos)
       const tax = Math.round(subtotal * 0.19);
       const total = subtotal + shippingCost + tax;
 
-      // Crear el pedido
+      let guestAccessToken = undefined;
+      let accessToken = null;
+      if (!req.userId) {
+        accessToken = crypto.randomBytes(32).toString('hex');
+        guestAccessToken = crypto.createHash('sha256').update(accessToken).digest('hex');
+      }
+
       const orderData = {
         items: orderItems,
         shippingAddress,
-        pricing: {
-          subtotal,
-          shipping: shippingCost,
-          tax,
-          total
-        },
-        payment: {
-          method: payment.method,
-          amount: total
-        },
-        notes: {
-          customer: notes?.customer || ''
-        }
+        pricing: { subtotal, shipping: shippingCost, tax, total },
+        payment: { method: payment.method, amount: total },
+        notes: { customer: notes?.customer || '' },
+        guestAccessToken
       };
 
-      // Agregar información del usuario o invitado
       if (req.userId) {
         orderData.user = req.userId;
       } else {
         orderData.guestInfo = guestInfo;
       }
 
-      const order = new Order(orderData);
-      await order.save();
+      const session = await mongoose.startSession();
+      let order;
 
-      // Reducir stock de los productos
-      for (let item of items) {
-        await Product.findById(item.product).then(product => {
-          return product.decrementStock(item.size, item.quantity);
+      try {
+        await session.withTransaction(async () => {
+          for (let item of items) {
+            const result = await Product.findOneAndUpdate(
+              { 
+                _id: item.product,
+                'sizes.size': item.size,
+                'sizes.stock': { $gte: item.quantity }
+              },
+              { $inc: { 'sizes.$.stock': -item.quantity } },
+              { session, new: true }
+            );
+            if (!result) throw new Error(`Stock insuficiente para ${item.product}`);
+          }
+
+          order = new Order(orderData);
+          await order.save({ session });
         });
+      } finally {
+        await session.endSession();
       }
 
-      // Enviar email de confirmación
+      // Enviar email
       try {
         const customerEmail = req.userId ? req.user.email : guestInfo.email;
-        const customerName = req.userId ? 
-          `${req.user.firstName} ${req.user.lastName}` : 
-          `${guestInfo.firstName} ${guestInfo.lastName}`;
+        const customerName = req.userId 
+          ? `${req.user.firstName} ${req.user.lastName}` 
+          : `${guestInfo.firstName} ${guestInfo.lastName}`;
 
         await sendEmail({
           to: customerEmail,
@@ -140,10 +139,13 @@ class OrderController {
           }
         });
       } catch (emailError) {
-        console.error('Error enviando email de confirmación:', emailError);
+        logger.error('Email confirmation failed', {
+          orderId: order._id,
+          error: emailError.message,
+          timestamp: new Date().toISOString()
+        });
       }
 
-      // Respuesta exitosa
       res.status(201).json({
         success: true,
         message: 'Pedido creado exitosamente',
@@ -151,25 +153,27 @@ class OrderController {
           orderNumber: order.orderNumber,
           total: order.pricing.total,
           status: order.status,
-          estimatedDelivery: order.calculateEstimatedDelivery()
+          estimatedDelivery: order.calculateEstimatedDelivery(),
+          guestToken: accessToken
         }
       });
 
     } catch (error) {
       logger.error('Error creando pedido', { 
-        orderId: order?._id, 
         userId: req.userId,
-        timestamp: new Date().toISOString()
-        
+        error: error.message,
+        stack: error.stack
       });
+      res.status(500).json({ success: false, message: 'Error interno del servidor' });
     }
   }
 
   // GET /api/orders - Obtener pedidos del usuario
   static async getUserOrders(req, res) {
     try {
+      // ⚠️ Las validaciones deben estar en las rutas, no aquí
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const limit = Math.min(parseInt(req.query.limit) || 10, 50);
       const skip = (page - 1) * limit;
 
       const orders = await Order.find({ user: req.userId })
@@ -191,75 +195,50 @@ class OrderController {
           itemsPerPage: limit
         }
       });
-
     } catch (error) {
-      logger.error('Error creando pedido', { 
-        orderId: order?._id, 
-        userId: req.userId,
-        timestamp: new Date().toISOString()
-        
-      });
+      logger.error('Error en getUserOrders', { userId: req.userId, error: error.message });
+      res.status(500).json({ success: false, message: 'Error al obtener pedidos' });
     }
   }
 
-  // GET /api/orders/:orderNumber - Obtener detalle de pedido específico
+  // GET /api/orders/:orderNumber
   static async getOrderByNumber(req, res) {
     try {
       const { orderNumber } = req.params;
+      const { token } = req.query;
 
-      const query = { orderNumber };
-      
-      // Si hay usuario autenticado, solo sus pedidos
+      let filter = { orderNumber };
+
       if (req.userId) {
-        query.user = req.userId;
+        filter.user = req.userId;
+      } else {
+        if (!token) {
+          return res.status(401).json({ success: false, message: 'Token de acceso requerido' });
+        }
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+        if (!hashedToken) {
+          return res.status(400).json({ success: false, message: 'Token inválido' });
+        }
+        filter.guestAccessToken = hashedToken;
       }
 
-      const order = await Order.findOne(query)
+      const order = await Order.findOne(filter)
         .populate('items.product', 'name images slug category')
         .populate('user', 'firstName lastName email')
         .select('-__v');
 
       if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: 'Pedido no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
       }
 
-      // Si no hay usuario autenticado, verificar que sea el email correcto (para invitados)
-if (!req.userId) {
-  const { token } = req.query;
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: 'Token de acceso requerido'
-    });
-  }
-  
-  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-  if (order.guestAccessToken !== hashedToken) {
-    return res.status(403).json({
-      success: false,
-      message: 'Token inválido'
-    });
-  }
-}
-
-      res.json({
-        success: true,
-        data: order
-      });
-
+      res.json({ success: true, data: order });
     } catch (error) {
-      console.error('Error obteniendo detalle del pedido:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      logger.error('Error en getOrderByNumber', { error: error.message });
+      res.status(500).json({ success: false, message: 'Error al obtener el pedido' });
     }
   }
 
-  // PUT /api/orders/:id/status - Actualizar estado del pedido (solo admin)
+  // PUT /api/orders/:id/status - Solo admin
   static async updateOrderStatus(req, res) {
     try {
       const errors = validationResult(req);
@@ -279,26 +258,17 @@ if (!req.userId) {
         .populate('items.product', 'name');
 
       if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: 'Pedido no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
       }
 
-      // Actualizar estado
-      await order.updateStatus(
-        status, 
-        `${req.user.firstName} ${req.user.lastName}`, 
-        notes
-      );
+      await order.updateStatus(status, `${req.user.firstName} ${req.user.lastName}`, notes);
 
-      // Si se proporciona número de seguimiento
       if (trackingNumber && status === 'shipped') {
         order.shipping.trackingNumber = trackingNumber;
         await order.save();
       }
 
-      // Enviar notificación al cliente
+      // Enviar email
       try {
         const customerEmail = order.user?.email || order.guestInfo?.email;
         const customerName = order.user ? 
@@ -321,7 +291,10 @@ if (!req.userId) {
           });
         }
       } catch (emailError) {
-        console.error('Error enviando notificación:', emailError);
+        logger.error('Email de actualización fallido', {
+          orderId: order._id,
+          error: emailError.message
+        });
       }
 
       res.json({
@@ -335,43 +308,38 @@ if (!req.userId) {
       });
 
     } catch (error) {
-      console.error('Error actualizando estado:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      logger.error('Error en updateOrderStatus', { error: error.message, orderId: req.params.id });
+      res.status(500).json({ success: false, message: 'Error al actualizar el pedido' });
     }
   }
 
-  // GET /api/orders/admin/all - Obtener todos los pedidos (solo admin)
+  // GET /api/orders/admin/all - Solo admin
   static async getAllOrdersAdmin(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const limit = Math.min(parseInt(req.query.limit) || 20, 50);
       const skip = (page - 1) * limit;
-       query('status').optional().isIn(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']),
-       query('search').optional().isLength({min: 1, max: 100}).escape()
+      const { status, search } = req.query;
 
-      let orders;
-      let total;
+      let filter = {};
+      if (status) filter.status = status;
+
+      let orders, total;
 
       if (search) {
-        // Búsqueda
-        orders = await Order.searchOrders(search)
-          .skip(skip)
-          .limit(limit);
-        total = (await Order.searchOrders(search)).length;
+        // Asumiendo que `searchOrders` es un método estático en el modelo
+        const searchResults = await Order.searchOrders(search);
+        total = searchResults.length;
+        orders = searchResults.slice(skip, skip + limit);
       } else {
-        // Lista normal
-        orders = await Order.find(query)
+        orders = await Order.find(filter)
           .populate('user', 'firstName lastName email')
           .populate('items.product', 'name images sku')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
           .select('-__v');
-        
-        total = await Order.countDocuments(query);
+        total = await Order.countDocuments(filter);
       }
 
       res.json({
@@ -386,31 +354,22 @@ if (!req.userId) {
       });
 
     } catch (error) {
-      console.error('Error obteniendo pedidos (admin):', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      logger.error('Error en getAllOrdersAdmin', { error: error.message });
+      res.status(500).json({ success: false, message: 'Error al obtener pedidos' });
     }
   }
 
-  // GET /api/orders/admin/stats - Estadísticas de ventas (solo admin)
+  // GET /api/orders/admin/stats - Solo admin
   static async getOrderStats(req, res) {
     try {
       const { startDate, endDate } = req.query;
       const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const end = endDate ? new Date(endDate) : new Date();
 
-      // Estadísticas generales
       const stats = await Order.getSalesStats(start, end);
       
-      // Pedidos por estado
       const statusStats = await Order.aggregate([
-        { 
-          $match: { 
-            createdAt: { $gte: start, $lte: end }
-          }
-        },
+        { $match: { createdAt: { $gte: start, $lte: end } } },
         {
           $group: {
             _id: '$status',
@@ -420,7 +379,6 @@ if (!req.userId) {
         }
       ]);
 
-      // Productos más vendidos
       const topProducts = await Order.aggregate([
         { 
           $match: { 
@@ -457,7 +415,6 @@ if (!req.userId) {
         }
       ]);
 
-      // Ventas por día
       const dailySales = await Order.aggregate([
         { 
           $match: { 
@@ -491,67 +448,42 @@ if (!req.userId) {
           statusBreakdown: statusStats,
           topProducts,
           dailySales,
-          period: {
-            startDate: start,
-            endDate: end
-          }
+          period: { startDate: start, endDate: end }
         }
       });
 
     } catch (error) {
-      logger.error('Error creando pedido', { 
-        orderId: order?._id, 
-        userId: req.userId,
-        timestamp: new Date().toISOString()
-        
-      });
+      logger.error('Error en getOrderStats', { error: error.message });
+      res.status(500).json({ success: false, message: 'Error al obtener estadísticas' });
     }
   }
 
-  // POST /api/orders/:orderNumber/payment/confirm - Confirmar pago PSE
+  // POST /api/orders/:orderNumber/payment/confirm
   static async confirmPayment(req, res) {
     try {
       const { orderNumber } = req.params;
       const { transactionId, pseReference, status } = req.body;
 
-      const order = await Order.findOne({ orderNumber })
-        .populate('user', 'firstName lastName email');
-
+      const order = await Order.findOne({ orderNumber });
       if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: 'Pedido no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
       }
 
       if (status === 'approved') {
         await order.markAsPaid(transactionId, pseReference);
-        
-        res.json({
-          success: true,
-          message: 'Pago confirmado exitosamente'
-        });
+        res.json({ success: true, message: 'Pago confirmado exitosamente' });
       } else {
-        // Pago rechazado o cancelado
         order.payment.status = status;
-        if (status === 'rejected' || status === 'cancelled') {
+        if (['rejected', 'cancelled'].includes(status)) {
           order.status = 'cancelled';
         }
         await order.save();
-
-        res.json({
-          success: true,
-          message: 'Estado de pago actualizado',
-          data: { status }
-        });
+        res.json({ success: true, message: 'Estado de pago actualizado', data: { status } });
       }
 
     } catch (error) {
-      console.error('Error confirmando pago:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error procesando confirmación de pago'
-      });
+      logger.error('Error en confirmPayment', { error: error.message, orderNumber: req.params.orderNumber });
+      res.status(500).json({ success: false, message: 'Error al confirmar el pago' });
     }
   }
 
@@ -562,86 +494,57 @@ if (!req.userId) {
       const { reason } = req.body;
 
       const order = await Order.findById(id);
-
       if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: 'Pedido no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
       }
 
-      // Solo permitir cancelar pedidos pendientes o confirmados
       if (!['pending', 'confirmed'].includes(order.status)) {
-        return res.status(400).json({
-          success: false,
-          message: 'No se puede cancelar un pedido en este estado'
-        });
+        return res.status(400).json({ success: false, message: 'No se puede cancelar un pedido en este estado' });
       }
 
-      // Verificar permisos (usuario propietario o admin)
       if (order.user && order.user.toString() !== req.userId && req.user.role !== 'admin') {
-        return res.status(403).json({
-          success: false,
-          message: 'No autorizado para cancelar este pedido'
-        });
+        return res.status(403).json({ success: false, message: 'No autorizado' });
       }
 
       // Restaurar stock
       for (let item of order.items) {
-        await Product.findByIdAndUpdate(
-          item.product,
+        await Product.updateOne(
+          { _id: item.product },
           { $inc: { [`sizes.$[elem].stock`]: item.quantity } },
           { arrayFilters: [{ 'elem.size': item.size }] }
         );
       }
 
-      // Actualizar estado a cancelado
       await order.updateStatus(
         'cancelled',
         req.user ? `${req.user.firstName} ${req.user.lastName}` : 'Sistema',
         reason || 'Pedido cancelado'
       );
 
-      res.json({
-        success: true,
-        message: 'Pedido cancelado exitosamente'
-      });
+      res.json({ success: true, message: 'Pedido cancelado exitosamente' });
 
     } catch (error) {
-      console.error('Error cancelando pedido:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error interno del servidor'
-      });
+      logger.error('Error en cancelOrder', { error: error.message, orderId: req.params.id });
+      res.status(500).json({ success: false, message: 'Error al cancelar el pedido' });
     }
   }
 
-  // Método auxiliar para calcular costo de envío
+  // Métodos auxiliares
   static calculateShippingCost(subtotal, shippingAddress) {
     const freeShippingThreshold = 150000;
-    
-    if (subtotal >= freeShippingThreshold) {
-      return 0;
-    }
+    if (subtotal >= freeShippingThreshold) return 0;
 
-    // Determinar costo de envío por ubicación
     const localCities = ['medellín', 'bello', 'itagüí', 'envigado', 'sabaneta', 'san pedro'];
-    const isLocal = localCities.some(city => 
-      shippingAddress.city.toLowerCase().includes(city)
-    );
-    
-    if (isLocal) {
-      return 8000; // Área metropolitana
-    } else if (shippingAddress.department.toLowerCase() === 'antioquia') {
-      return 12000; // Antioquia
-    } else {
-      return 15000; // Resto del país
-    }
+    const city = (shippingAddress.city || '').toLowerCase();
+    const department = (shippingAddress.department || '').toLowerCase();
+
+    if (localCities.some(c => city.includes(c))) return 8000;
+    if (department === 'antioquia') return 12000;
+    return 15000;
   }
 
-  // Método auxiliar para traducir estados
   static getStatusText(status) {
-    const statusMap = {
+    const map = {
       pending: 'Pendiente',
       confirmed: 'Confirmado',
       processing: 'En preparación',
@@ -650,8 +553,7 @@ if (!req.userId) {
       cancelled: 'Cancelado',
       returned: 'Devuelto'
     };
-    
-    return statusMap[status] || status;
+    return map[status] || status;
   }
 }
 
