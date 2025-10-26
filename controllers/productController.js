@@ -1,553 +1,587 @@
-// controllers/productController.js - Controlador de productos para ATHENA BRAND
+// controllers/productController.js - Controlador de productos para ATHENA BRAND (refactorizado, seguro)
 const Product = require('../models/Product');
 const { validationResult } = require('express-validator');
-const connectDB = require('../db');
+const logger = require('../config/logger');
+const mongoose = require('mongoose');
+
+// -----------------------------
+// Config / Constantes
+// -----------------------------
+const VALID_CATEGORIES = ['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'];
+const ALLOWED_SORT_FIELDS = {
+  price_asc: { price: 1 },
+  price_desc: { price: -1 },
+  newest: { createdAt: -1 },
+  popular: { sales: -1, views: -1 },
+  name_asc: { name: 1 },
+  name_desc: { name: -1 }
+};
+
+// -----------------------------
+// Helpers
+// -----------------------------
+/**
+ * Escapa caracteres especiales para usar en $regex.
+ */
+const escapeRegex = (string) => {
+  if (typeof string !== 'string') return '';
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+/**
+ * Generador seguro de slugs.
+ */
+const generateSlug = (name) => {
+  if (!name || typeof name !== 'string') {
+    throw new Error('Nombre inválido para generar slug');
+  }
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/gi, '') // mantener alfanuméricos, espacios y guiones
+    .replace(/\s+/g, '-')
+    .substring(0, 100)
+    .replace(/^-+|-+$/g, '');
+};
+
+/**
+ * Asegura que un slug sea único (excluye optional excludeId).
+ * Retorna el slug final (si existe conflicto, le añade un sufijo incremental).
+ */
+const ensureUniqueSlug = async (baseSlug, excludeId = null) => {
+  let slug = baseSlug;
+  let suffix = 0;
+  while (true) {
+    const query = { slug };
+    if (excludeId && mongoose.Types.ObjectId.isValid(excludeId)) {
+      query._id = { $ne: excludeId };
+    }
+    const existing = await Product.findOne(query).select('_id slug').lean();
+    if (!existing) return slug;
+    suffix += 1;
+    slug = `${baseSlug}-${suffix}`;
+    if (suffix > 1000) throw new Error('No se pudo generar slug único');
+  }
+};
+
+/**
+ * Normaliza y limita paginación segura.
+ */
+const parsePagination = (query) => {
+  const page = Math.max(1, Math.min(1000, parseInt(query.page, 10) || 1));
+  const limit = Math.max(1, Math.min(100, parseInt(query.limit, 10) || 12));
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+};
 
 class ProductController {
-  // GET /api/products - Obtener todos los productos con paginación y filtros
+  // -----------------------------
+  // GET /api/products
+  // -----------------------------
   static async getAllProducts(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 12;
-      const skip = (page - 1) * limit;
-      
-      // Filtros
+      const { page, limit, skip } = parsePagination(req.query);
+
       const filters = { isActive: true };
-      
+
+      // Categoría (whitelist)
       if (req.query.category) {
-        filters.category = req.query.category;
-      }
-      
-      if (req.query.featured === 'true') {
-        filters.isFeatured = true;
-      }
-      
-      // Rango de precios
-      if (req.query.minPrice || req.query.maxPrice) {
-        filters.$or = [
-          // Precio normal
-          {
-            $and: [
-              { discountPrice: { $exists: false } },
-              req.query.minPrice && { price: { $gte: parseFloat(req.query.minPrice) } },
-              req.query.maxPrice && { price: { $lte: parseFloat(req.query.maxPrice) } }
-            ].filter(Boolean)
-          },
-          // Precio con descuento
-          {
-            $and: [
-              { discountPrice: { $exists: true, $gt: 0 } },
-              req.query.minPrice && { discountPrice: { $gte: parseFloat(req.query.minPrice) } },
-              req.query.maxPrice && { discountPrice: { $lte: parseFloat(req.query.maxPrice) } }
-            ].filter(Boolean)
-          }
-        ];
+        const category = String(req.query.category).trim();
+        if (!VALID_CATEGORIES.includes(category)) {
+          return res.status(400).json({ success: false, message: 'Categoría no válida' });
+        }
+        filters.category = category;
       }
 
-      // Filtro por tallas
+      // Tallas
       if (req.query.sizes) {
         const sizes = Array.isArray(req.query.sizes) ? req.query.sizes : [req.query.sizes];
-        filters['sizes.size'] = { $in: sizes };
+        const validSizes = sizes.filter(s => typeof s === 'string' && s.length <= 10);
+        if (validSizes.length) {
+          filters['sizes.size'] = { $in: validSizes };
+        }
       }
 
-      // Filtro por disponibilidad
+      // Disponibilidad
       if (req.query.inStock === 'true') {
         filters['sizes.stock'] = { $gt: 0 };
       }
-      
-      // Ordenamiento
-      let sortBy = {};
-      switch (req.query.sort) {
-        case 'price_asc':
-          sortBy = { price: 1 };
-          break;
-        case 'price_desc':
-          sortBy = { price: -1 };
-          break;
-        case 'newest':
-          sortBy = { createdAt: -1 };
-          break;
-        case 'popular':
-          sortBy = { sales: -1, views: -1 };
-          break;
-        case 'name_asc':
-          sortBy = { name: 1 };
-          break;
-        case 'name_desc':
-          sortBy = { name: -1 };
-          break;
-        default:
-          sortBy = { createdAt: -1 };
+
+      // Rango de precios (manejo simple y seguro)
+      if (req.query.minPrice || req.query.maxPrice) {
+        const minPrice = parseFloat(req.query.minPrice);
+        const maxPrice = parseFloat(req.query.maxPrice);
+
+        // Evitamos construir $expr complejo si no es necesario
+        // Filtramos por price OR discountPrice en el pipeline si se requiere precisión.
+        if (!isNaN(minPrice) || !isNaN(maxPrice)) {
+          // Usamos $expr para comparar con discountPrice cuando exista
+          const priceConditions = [];
+          if (!isNaN(minPrice) && minPrice >= 0) {
+            priceConditions.push({ $gte: [{ $ifNull: ['$discountPrice', '$price'] }, minPrice] });
+          }
+          if (!isNaN(maxPrice) && maxPrice >= 0) {
+            priceConditions.push({ $lte: [{ $ifNull: ['$discountPrice', '$price'] }, maxPrice] });
+          }
+          if (priceConditions.length) {
+            filters.$expr = { $and: priceConditions };
+          }
+        }
       }
-      
-      const products = await Product.find(filters)
-        .sort(sortBy)
-        .skip(skip)
-        .limit(limit)
-        .select('-__v');
-      
-      const total = await Product.countDocuments(filters);
-      
+
+      // Ordenamiento seguro
+      const sortBy = ALLOWED_SORT_FIELDS[req.query.sort] || { createdAt: -1 };
+
+      const [products, total] = await Promise.all([
+        Product.find(filters).sort(sortBy).skip(skip).limit(limit).select('-__v').lean(),
+        Product.countDocuments(filters)
+      ]);
+
       res.json({
         success: true,
-        data: products,
+        products,
         pagination: {
           currentPage: page,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.max(1, Math.ceil(total / limit)),
           totalItems: total,
           itemsPerPage: limit,
           hasNextPage: page < Math.ceil(total / limit),
           hasPrevPage: page > 1
         }
       });
-      
     } catch (error) {
-      console.error('Error obteniendo productos:', error);
+      logger.error('Error en getAllProducts', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        ip: req.ip,
+        query: req.query
+      });
       res.status(500).json({
         success: false,
-        message: 'Error al obtener productos',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        message: 'Error interno del servidor',
+        errorCode: 'PRODUCTS_FETCH_ERROR'
       });
     }
   }
 
-  // GET /api/products/search - Búsqueda de productos
+  // -----------------------------
+  // GET /api/products/search
+  // -----------------------------
   static async searchProducts(req, res) {
     try {
-      const { q: query, category, limit = 20 } = req.query;
-      
-      if (!query || query.trim().length < 2) {
-        return res.status(400).json({
-          success: false,
-          message: 'La consulta de búsqueda debe tener al menos 2 caracteres'
-        });
+      const q = String(req.query.q || '').trim();
+      const category = req.query.category;
+      const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+
+      if (!q || q.length < 2 || q.length > 100) {
+        return res.status(400).json({ success: false, message: 'La consulta debe tener entre 2 y 100 caracteres' });
       }
-      
-      // Crear criterio de búsqueda más flexible
-      const searchCriteria = {
-        isActive: true,
-        $or: [
-          { name: { $regex: query, $options: 'i' } },
-          { description: { $regex: query, $options: 'i' } },
-          { tags: { $in: [new RegExp(query, 'i')] } },
-          { sku: { $regex: query, $options: 'i' } }
-        ]
-      };
-      
+
+      const sanitized = escapeRegex(q);
+      const searchCriteria = { isActive: true, $or: [
+        { name: { $regex: sanitized, $options: 'i' } },
+        { description: { $regex: sanitized, $options: 'i' } },
+        { sku: { $regex: sanitized, $options: 'i' } }
+      ]};
+
+      // Tags segment safe (solo entradas alfanuméricas cortas)
+      const tagSafe = q.toLowerCase();
+      if (/^[a-z0-9\s\-_]{1,30}$/i.test(tagSafe)) {
+        searchCriteria.$or.push({ tags: { $in: [tagSafe] } });
+      }
+
       if (category) {
+        if (!VALID_CATEGORIES.includes(category)) {
+          return res.status(400).json({ success: false, message: 'Categoría no válida' });
+        }
         searchCriteria.category = category;
       }
-      
+
       const products = await Product.find(searchCriteria)
-        .limit(parseInt(limit))
+        .limit(limit)
         .sort({ sales: -1, views: -1 })
-        .select('-__v');
-      
+        .select('-__v')
+        .lean();
+
       res.json({
         success: true,
-        data: products,
+        products,
         total: products.length,
-        query: query
+        query: q
       });
-      
     } catch (error) {
-      console.error('Error en búsqueda:', error);
+      logger.error('Error en searchProducts', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        ip: req.ip,
+        query: req.query
+      });
       res.status(500).json({
         success: false,
         message: 'Error en la búsqueda',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        errorCode: 'SEARCH_ERROR'
       });
     }
   }
 
-  // GET /api/products/category/:category - Productos por categoría
+  // -----------------------------
+  // GET /api/products/category/:category
+  // -----------------------------
   static async getProductsByCategory(req, res) {
     try {
       const { category } = req.params;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 12;
-      const skip = (page - 1) * limit;
-      
-      // Validar categoría ATHENA BRAND
-      const validCategories = ['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'];
-      if (!validCategories.includes(category)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Categoría no válida para ATHENA BRAND'
-        });
+      if (!VALID_CATEGORIES.includes(category)) {
+        return res.status(400).json({ success: false, message: 'Categoría no válida para ATHENA BRAND' });
       }
-      
-      // Aplicar filtros adicionales
-      const filters = { 
-        category, 
-        isActive: true 
-      };
 
-      // Filtros de la query
+      const { page, limit, skip } = parsePagination(req.query);
+      const filters = { category, isActive: true };
+
       if (req.query.subcategory) {
-        filters.subcategory = req.query.subcategory;
-      }
-
-      if (req.query.minPrice || req.query.maxPrice) {
-        filters.price = {};
-        if (req.query.minPrice) filters.price.$gte = parseFloat(req.query.minPrice);
-        if (req.query.maxPrice) filters.price.$lte = parseFloat(req.query.maxPrice);
-      }
-
-      // Ordenamiento
-      let sortBy = { createdAt: -1 };
-      if (req.query.sort) {
-        switch (req.query.sort) {
-          case 'price_asc':
-            sortBy = { price: 1 };
-            break;
-          case 'price_desc':
-            sortBy = { price: -1 };
-            break;
-          case 'popular':
-            sortBy = { sales: -1, views: -1 };
-            break;
-          case 'name_asc':
-            sortBy = { name: 1 };
-            break;
+        const subcat = String(req.query.subcategory).trim();
+        if (subcat.length > 0 && subcat.length <= 50 && /^[a-zA-Z0-9\s\-_]+$/.test(subcat)) {
+          filters.subcategory = subcat;
         }
       }
-      
-      const products = await Product.find(filters)
-        .sort(sortBy)
-        .skip(skip)
-        .limit(limit)
-        .select('-__v');
-      
-      const total = await Product.countDocuments(filters);
-      
+
+      // Precios (simple, solo price)
+      if (req.query.minPrice || req.query.maxPrice) {
+        const minPrice = parseFloat(req.query.minPrice);
+        const maxPrice = parseFloat(req.query.maxPrice);
+        const priceConditions = [];
+        if (!isNaN(minPrice) && minPrice >= 0) priceConditions.push({ $gte: ['$price', minPrice] });
+        if (!isNaN(maxPrice) && maxPrice >= 0) priceConditions.push({ $lte: ['$price', maxPrice] });
+        if (priceConditions.length) filters.$expr = { $and: priceConditions };
+      }
+
+      const sortBy = ALLOWED_SORT_FIELDS[req.query.sort] || { createdAt: -1 };
+
+      const [products, total] = await Promise.all([
+        Product.find(filters).sort(sortBy).skip(skip).limit(limit).select('-__v').lean(),
+        Product.countDocuments(filters)
+      ]);
+
       res.json({
         success: true,
-        data: products,
+        products,
         category: category.toUpperCase(),
         total,
         pagination: {
           currentPage: page,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.max(1, Math.ceil(total / limit)),
           totalItems: total,
           itemsPerPage: limit
         }
       });
-      
     } catch (error) {
-      console.error('Error obteniendo productos por categoría:', error);
+      logger.error('Error en getProductsByCategory', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        ip: req.ip,
+        category: req.params.category
+      });
       res.status(500).json({
         success: false,
         message: 'Error al obtener productos por categoría',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        errorCode: 'CATEGORY_FETCH_ERROR'
       });
     }
   }
 
-  // GET /api/products/featured - Productos destacados
+  // -----------------------------
+  // GET /api/products/featured
+  // -----------------------------
   static async getFeaturedProducts(req, res) {
     try {
-      const limit = parseInt(req.query.limit) || 8;
-      
-      const products = await Product.find({
-        isFeatured: true,
-        isActive: true
-      })
+      const limit = Math.min(50, parseInt(req.query.limit, 10) || 8);
+      const products = await Product.find({ isFeatured: true, isActive: true })
         .sort({ sales: -1, createdAt: -1 })
         .limit(limit)
-        .select('-__v');
-      
+        .select('-__v')
+        .lean();
+
       res.json({
         success: true,
-        data: products,
+        products,
         message: 'Productos destacados ATHENA BRAND'
       });
-      
     } catch (error) {
-      console.error('Error obteniendo productos destacados:', error);
+      logger.error('Error en getFeaturedProducts', { error: error.message, stack: error.stack });
       res.status(500).json({
         success: false,
         message: 'Error al obtener productos destacados',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        errorCode: 'FEATURED_FETCH_ERROR'
       });
     }
   }
 
-  // GET /api/products/:slug - Detalle de producto por slug
+  // -----------------------------
+  // GET /api/products/:slug
+  // -----------------------------
   static async getProductBySlug(req, res) {
     try {
       const { slug } = req.params;
-      
-      const product = await Product.findOne({ 
-        slug, 
-        isActive: true 
-      }).select('-__v');
-      
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: 'Producto no encontrado'
-        });
+      if (!slug || typeof slug !== 'string' || slug.length > 100) {
+        return res.status(400).json({ success: false, message: 'Slug inválido' });
       }
-      
-      // Incrementar vistas
-      await product.incrementViews();
-      
-      // Productos relacionados (misma categoría)
+
+      const product = await Product.findOne({ slug, isActive: true }).select('-__v');
+      if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+
+      // Incrementar views (método del modelo)
+      try {
+        await product.incrementViews();
+      } catch (incErr) {
+        // No interrumpimos la respuesta si falla el incremento de views
+        logger.warn('No se pudo incrementar views', { productId: product._id, err: incErr.message });
+      }
+
       const relatedProducts = await Product.find({
         category: product.category,
         _id: { $ne: product._id },
         isActive: true
       })
         .limit(4)
-        .select('name slug images price discountPrice category');
-      
-      res.json({
-        success: true,
-        data: product,
-        relatedProducts
-      });
-      
+        .select('name slug images price discountPrice category')
+        .lean();
+
+      res.json({ success: true, product, relatedProducts });
     } catch (error) {
-      console.error('Error obteniendo detalle del producto:', error);
+      logger.error('Error en getProductBySlug', {
+        error: error.message,
+        stack: error.stack,
+        slug: req.params.slug
+      });
       res.status(500).json({
         success: false,
         message: 'Error al obtener detalle del producto',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        errorCode: 'PRODUCT_DETAIL_ERROR'
       });
     }
   }
 
-  // POST /api/products - Crear nuevo producto (solo admin)
+  // -----------------------------
+  // POST /api/products - Solo admin
+  // -----------------------------
   static async createProduct(req, res) {
     try {
+      // Validaciones de express-validator deberían ejecutarse en middleware de rutas.
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Datos de producto inválidos',
-          errors: errors.array()
-        });
+        return res.status(400).json({ success: false, message: 'Datos de producto inválidos', errors: errors.array() });
       }
 
-      const productData = req.body;
-      
-      // Generar slug si no se proporciona
-      if (!productData.slug) {
-        productData.slug = productData.name
-          .toLowerCase()
-          .replace(/[^a-zA-Z0-9\s]/g, '')
-          .replace(/\s+/g, '-');
+      const productData = { ...req.body };
+
+      if (productData.name) {
+        const baseSlug = generateSlug(productData.name);
+        productData.slug = await ensureUniqueSlug(baseSlug);
       }
-      
+
       const product = new Product(productData);
       await product.save();
-      
-      res.status(201).json({
-        success: true,
-        data: product,
-        message: 'Producto creado exitosamente'
-      });
-      
+
+      logger.info('Producto creado', { userId: req.user?.id, productId: product._id });
+
+      res.status(201).json({ success: true, product, message: 'Producto creado exitosamente' });
     } catch (error) {
-      console.error('Error creando producto:', error);
-      
-      // Manejar errores de duplicación
+      logger.error('Error en createProduct', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        body: req.body
+      });
+
       if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
-        return res.status(400).json({
-          success: false,
-          message: `Ya existe un producto con este ${field === 'slug' ? 'nombre' : field}`
-        });
+        return res.status(400).json({ success: false, message: 'Ya existe un producto con este SKU o slug' });
       }
-      
-      res.status(400).json({
+
+      res.status(500).json({
         success: false,
         message: 'Error al crear producto',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        errorCode: 'PRODUCT_CREATE_ERROR'
       });
     }
   }
 
-  // PUT /api/products/:id - Actualizar producto (solo admin)
+  // -----------------------------
+  // PUT /api/products/:id - Solo admin
+  // -----------------------------
   static async updateProduct(req, res) {
     try {
       const { id } = req.params;
-      
+
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Datos de actualización inválidos',
-          errors: errors.array()
-        });
+        return res.status(400).json({ success: false, message: 'Datos de actualización inválidos', errors: errors.array() });
       }
 
-      const updateData = req.body;
-      
-      // Si se actualiza el nombre, regenerar slug
-      if (updateData.name && !updateData.slug) {
-        updateData.slug = updateData.name
-          .toLowerCase()
-          .replace(/[^a-zA-Z0-9\s]/g, '')
-          .replace(/\s+/g, '-');
+      const updateData = { ...req.body };
+
+      if (updateData.name) {
+        const baseSlug = generateSlug(updateData.name);
+        updateData.slug = await ensureUniqueSlug(baseSlug, id);
       }
-      
-      const product = await Product.findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true, runValidators: true }
-      ).select('-__v');
-      
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: 'Producto no encontrado'
-        });
-      }
-      
-      res.json({
-        success: true,
-        data: product,
-        message: 'Producto actualizado exitosamente'
-      });
-      
+
+      const product = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, select: '-__v' });
+      if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+
+      logger.info('Producto actualizado', { userId: req.user?.id, productId: product._id, changes: updateData });
+
+      res.json({ success: true, product, message: 'Producto actualizado exitosamente' });
     } catch (error) {
-      console.error('Error actualizando producto:', error);
-      res.status(400).json({
+      logger.error('Error en updateProduct', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        productId: req.params.id
+      });
+      res.status(500).json({
         success: false,
         message: 'Error al actualizar producto',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        errorCode: 'PRODUCT_UPDATE_ERROR'
       });
     }
   }
 
-  // DELETE /api/products/:id - Eliminar producto (soft delete)
+  // -----------------------------
+  // DELETE /api/products/:id - Soft delete (solo admin)
+  // -----------------------------
   static async deleteProduct(req, res) {
     try {
       const { id } = req.params;
-      
-      const product = await Product.findByIdAndUpdate(
-        id,
-        { isActive: false },
-        { new: true }
-      );
-      
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: 'Producto no encontrado'
-        });
-      }
-      
-      res.json({
-        success: true,
-        message: 'Producto eliminado exitosamente'
-      });
-      
+      const product = await Product.findByIdAndUpdate(id, { isActive: false }, { new: true });
+      if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+
+      logger.info('Producto desactivado (soft delete)', { userId: req.user?.id, productId: product._id });
+
+      res.json({ success: true, message: 'Producto eliminado exitosamente' });
     } catch (error) {
-      console.error('Error eliminando producto:', error);
+      logger.error('Error en deleteProduct', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        productId: req.params.id
+      });
       res.status(500).json({
         success: false,
         message: 'Error al eliminar producto',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        errorCode: 'PRODUCT_DELETE_ERROR'
       });
     }
   }
 
-  // GET /api/products/admin/all - Obtener todos los productos para admin
+  // -----------------------------
+  // GET /api/products/admin/all - Solo admin
+  // -----------------------------
   static async getAllProductsAdmin(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const skip = (page - 1) * limit;
-      
-      // Incluir productos inactivos para admin
+      const { page, limit, skip } = parsePagination(req.query);
       const filters = {};
-      
-      if (req.query.category) {
-        filters.category = req.query.category;
-      }
-      
+
       if (req.query.isActive !== undefined) {
-        filters.isActive = req.query.isActive === 'true';
+        filters.isActive = String(req.query.isActive) === 'true';
+      }
+
+      if (req.query.category) {
+        if (!VALID_CATEGORIES.includes(req.query.category)) {
+          return res.status(400).json({ success: false, message: 'Categoría no válida' });
+        }
+        filters.category = req.query.category;
       }
 
       if (req.query.search) {
-        filters.$or = [
-          { name: { $regex: req.query.search, $options: 'i' } },
-          { sku: { $regex: req.query.search, $options: 'i' } },
-          { description: { $regex: req.query.search, $options: 'i' } }
-        ];
+        const safeSearch = escapeRegex(String(req.query.search).trim());
+        if (safeSearch.length >= 2) {
+          filters.$or = [
+            { name: { $regex: safeSearch, $options: 'i' } },
+            { sku: { $regex: safeSearch, $options: 'i' } },
+            { description: { $regex: safeSearch, $options: 'i' } }
+          ];
+        }
       }
-      
-      const products = await Product.find(filters)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .select('-__v');
-      
-      const total = await Product.countDocuments(filters);
-      
+
+      const [products, total] = await Promise.all([
+        Product.find(filters).sort({ createdAt: -1 }).skip(skip).limit(limit).select('-__v').lean(),
+        Product.countDocuments(filters)
+      ]);
+
       res.json({
         success: true,
-        data: products,
+        products,
         pagination: {
           currentPage: page,
-          totalPages: Math.ceil(total / limit),
+          totalPages: Math.max(1, Math.ceil(total / limit)),
           totalItems: total,
           itemsPerPage: limit
         }
       });
-      
     } catch (error) {
-      console.error('Error obteniendo productos (admin):', error);
+      logger.error('Error en getAllProductsAdmin', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id
+      });
       res.status(500).json({
         success: false,
-        message: 'Error al obtener productos'
+        message: 'Error al obtener productos',
+        errorCode: 'ADMIN_PRODUCTS_FETCH_ERROR'
       });
     }
   }
 
-  // PUT /api/products/:id/stock - Actualizar stock de producto
+  // -----------------------------
+  // PUT /api/products/:id/stock - Solo admin
+  // -----------------------------
   static async updateStock(req, res) {
     try {
       const { id } = req.params;
       const { size, quantity, operation = 'set' } = req.body;
 
-      const product = await Product.findById(id);
-      
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: 'Producto no encontrado'
-        });
+      if (!size || typeof size !== 'string' || size.length > 10) {
+        return res.status(400).json({ success: false, message: 'Talla inválida' });
       }
+
+      const qty = parseInt(quantity, 10);
+      if (isNaN(qty) || qty < 0) {
+        return res.status(400).json({ success: false, message: 'Cantidad inválida' });
+      }
+
+      const product = await Product.findById(id);
+      if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
 
       const sizeIndex = product.sizes.findIndex(s => s.size === size);
-      
       if (sizeIndex === -1) {
-        return res.status(400).json({
-          success: false,
-          message: `Talla ${size} no encontrada para este producto`
-        });
+        return res.status(400).json({ success: false, message: `Talla ${size} no encontrada` });
       }
 
-      // Actualizar stock según la operación
       switch (operation) {
         case 'add':
-          product.sizes[sizeIndex].stock += quantity;
+          product.sizes[sizeIndex].stock += qty;
           break;
         case 'subtract':
-          product.sizes[sizeIndex].stock = Math.max(0, product.sizes[sizeIndex].stock - quantity);
+          product.sizes[sizeIndex].stock = Math.max(0, product.sizes[sizeIndex].stock - qty);
           break;
         case 'set':
-        default:
-          product.sizes[sizeIndex].stock = Math.max(0, quantity);
+          product.sizes[sizeIndex].stock = qty;
           break;
+        default:
+          return res.status(400).json({ success: false, message: 'Operación no válida' });
       }
 
       await product.save();
+
+      logger.info('Stock actualizado', {
+        userId: req.user?.id,
+        productId: product._id,
+        size,
+        operation,
+        quantity: qty,
+        newStock: product.sizes[sizeIndex].stock
+      });
 
       res.json({
         success: true,
@@ -558,188 +592,17 @@ class ProductController {
           newStock: product.sizes[sizeIndex].stock
         }
       });
-
     } catch (error) {
-      console.error('Error actualizando stock:', error);
+      logger.error('Error en updateStock', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.user?.id,
+        productId: req.params.id
+      });
       res.status(500).json({
         success: false,
-        message: 'Error al actualizar stock'
-      });
-    }
-  }
-
-  // GET /api/products/analytics/stats - Estadísticas de productos
-  static async getProductStats(req, res) {
-    try {
-      const totalProducts = await Product.countDocuments({ isActive: true });
-      const totalCategories = await Product.distinct('category', { isActive: true });
-      const lowStock = await Product.find({
-        isActive: true,
-        'sizes.stock': { $lte: 5 }
-      }).countDocuments();
-
-      // Productos más vendidos
-      const topSelling = await Product.find({ isActive: true })
-        .sort({ sales: -1 })
-        .limit(5)
-        .select('name sales sku');
-
-      // Productos más vistos
-      const mostViewed = await Product.find({ isActive: true })
-        .sort({ views: -1 })
-        .limit(5)
-        .select('name views sku');
-
-      // Productos por categoría
-      const productsByCategory = await Product.aggregate([
-        { $match: { isActive: true } },
-        {
-          $group: {
-            _id: '$category',
-            count: { $sum: 1 },
-            totalValue: { $sum: '$price' }
-          }
-        },
-        { $sort: { count: -1 } }
-      ]);
-
-      res.json({
-        success: true,
-        data: {
-          overview: {
-            totalProducts,
-            totalCategories: totalCategories.length,
-            lowStockProducts: lowStock
-          },
-          topSelling,
-          mostViewed,
-          productsByCategory
-        }
-      });
-
-    } catch (error) {
-      console.error('Error obteniendo estadísticas:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error al obtener estadísticas'
-      });
-    }
-  }
-
-  // POST /api/products/batch - Operaciones en lote
-  static async batchOperations(req, res) {
-    try {
-      const { operation, productIds, data } = req.body;
-
-      if (!operation || !productIds || !Array.isArray(productIds)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Operación y IDs de productos son requeridos'
-        });
-      }
-
-      let result;
-
-      switch (operation) {
-        case 'activate':
-          result = await Product.updateMany(
-            { _id: { $in: productIds } },
-            { isActive: true }
-          );
-          break;
-
-        case 'deactivate':
-          result = await Product.updateMany(
-            { _id: { $in: productIds } },
-            { isActive: false }
-          );
-          break;
-
-        case 'feature':
-          result = await Product.updateMany(
-            { _id: { $in: productIds } },
-            { isFeatured: true }
-          );
-          break;
-
-        case 'unfeature':
-          result = await Product.updateMany(
-            { _id: { $in: productIds } },
-            { isFeatured: false }
-          );
-          break;
-
-        case 'updateCategory':
-          if (!data.category) {
-            return res.status(400).json({
-              success: false,
-              message: 'Categoría requerida para esta operación'
-            });
-          }
-          result = await Product.updateMany(
-            { _id: { $in: productIds } },
-            { category: data.category }
-          );
-          break;
-
-        default:
-          return res.status(400).json({
-            success: false,
-            message: 'Operación no válida'
-          });
-      }
-
-      res.json({
-        success: true,
-        message: `Operación ${operation} ejecutada exitosamente`,
-        data: {
-          modifiedCount: result.modifiedCount,
-          matchedCount: result.matchedCount
-        }
-      });
-
-    } catch (error) {
-      console.error('Error en operación en lote:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error ejecutando operación en lote'
-      });
-    }
-  }
-
-  // GET /api/products/export - Exportar productos (CSV)
-  static async exportProducts(req, res) {
-    try {
-      const { format = 'json' } = req.query;
-      
-      const products = await Product.find({ isActive: true })
-        .select('-__v -createdAt -updatedAt')
-        .lean();
-
-      if (format === 'csv') {
-        // Convertir a CSV (implementación básica)
-        const csvHeader = 'Name,SKU,Category,Price,Discount Price,Stock\n';
-        const csvRows = products.map(p => {
-          const totalStock = p.sizes.reduce((sum, size) => sum + size.stock, 0);
-          return `"${p.name}","${p.sku}","${p.category}",${p.price},${p.discountPrice || ''},${totalStock}`;
-        }).join('\n');
-        
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="productos-athena.csv"');
-        res.send(csvHeader + csvRows);
-      } else {
-        res.json({
-          success: true,
-          data: products,
-          count: products.length
-        });
-      }
-
-    } catch (error) {
-      console.error('Error exportando productos:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error al exportar productos'
+        message: 'Error al actualizar stock',
+        errorCode: 'STOCK_UPDATE_ERROR'
       });
     }
   }
