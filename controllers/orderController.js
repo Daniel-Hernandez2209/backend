@@ -1,11 +1,11 @@
 // controllers/orderController.js - Controlador de pedidos para ATHENA BRAND
-const { validationResult, query } = require('express-validator');
-const Order = require('../models/Order');
-const Product = require('../models/Product');
-const logger = require('../config/logger'); 
-const crypto = require('crypto');
-const sendEmail = require('../utils/sendEmail');
-const mongoose = require('mongoose');
+const { validationResult, query } = import('express-validator');
+const Order = import('../models/Order');
+const Product = import('../models/Product');
+const logger = import('../config/logger'); 
+const crypto = import('crypto');
+const sendEmail = import('../utils/sendEmail');
+const mongoose = import('mongoose');
 
 class OrderController {
   // POST /api/orders - Crear nuevo pedido
@@ -557,4 +557,4 @@ class OrderController {
   }
 }
 
-module.exports = OrderController;
+export default OrderController;

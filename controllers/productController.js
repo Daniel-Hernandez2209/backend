@@ -1,8 +1,8 @@
 // controllers/productController.js - Controlador de productos para ATHENA BRAND (refactorizado, seguro)
-const Product = require('../models/Product');
-const { validationResult } = require('express-validator');
-const logger = require('../config/logger');
-const mongoose = require('mongoose');
+const Product = import('../models/Product');
+const { validationResult } = import('express-validator');
+const logger = import('../config/logger');
+const mongoose = import('mongoose');
 
 // -----------------------------
 // Config / Constantes
@@ -608,4 +608,4 @@ class ProductController {
   }
 }
 
-module.exports = ProductController;
+export default  ProductController;

@@ -1,9 +1,9 @@
 // models/User.js - Modelo de usuarios para ATHENA BRAND (Optimizado y Seguro)
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
-const validator = require('validator');
-const DOMPurify = require('isomorphic-dompurify');
+const mongoose = import('mongoose');
+const bcrypt = import('bcryptjs');
+const crypto = import('crypto');
+const validator = import('validator');
+const DOMPurify = import('isomorphic-dompurify');
 
 // ✅ Validador reutilizable para nombres
 const nameValidator = (name) => /^[a-zA-ZÀ-ÿ\s\-']+$/u.test(name);
@@ -216,4 +216,4 @@ userSchema.statics.findByEmail = function (email, includePassword = false) {
 };
 
 const User = mongoose.model('User', userSchema);
-module.exports = User;
+export  default User;

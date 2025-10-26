@@ -1,7 +1,7 @@
 // controllers/categoryController.js - VERSIÓN CON MONGODB
-const Category = require('../models/category');
-const logger = require('../utils/logger');
-const NodeCache = require('node-cache');
+const Category = import('../models/category');
+const logger = import('../utils/logger');
+const NodeCache = import('node-cache');
 
 // Cache con TTL de 1 hora
 const categoryCache = new NodeCache({ 
@@ -483,4 +483,4 @@ class CategoryController {
   }
 }
 
-module.exports = CategoryController;
+export default  CategoryController;

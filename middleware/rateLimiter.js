@@ -1,5 +1,5 @@
 // middleware/rateLimiter.js
-const rateLimit = require('express-rate-limit');
+const rateLimit = import('express-rate-limit');
 
 // ============================================
 // RATE LIMITERS POR TIPO DE OPERACIÓN
@@ -81,7 +81,7 @@ const seoLimiter = rateLimit({
   }
 });
 
-module.exports = {
+export default  {
   publicReadLimiter,
   heavyReadLimiter,
   adminWriteLimiter,

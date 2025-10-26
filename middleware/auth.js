@@ -1,9 +1,9 @@
 // middleware/auth.js - Middleware de autenticación
 // middleware/auth.js - Middleware de autenticación
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const mongoose = require('mongoose');
-const rateLimit = require('express-rate-limit');
+const jwt = import('jsonwebtoken');
+const User = import('../models/User');
+const mongoose = import('mongoose');
+const rateLimit = import('express-rate-limit');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -175,7 +175,7 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-module.exports = {
+export default  {
   auth,
   adminAuth,
   optionalAuth

@@ -1,5 +1,5 @@
 // models/Category.js
-const mongoose = require('mongoose');
+const mongoose = import('mongoose');
 
 const subcategorySchema = new mongoose.Schema({
   name: {
@@ -153,4 +153,4 @@ categorySchema.pre('remove', async function(next) {
 
 const Category = mongoose.model('Category', categorySchema);
 
-module.exports = Category;
+export default Category;

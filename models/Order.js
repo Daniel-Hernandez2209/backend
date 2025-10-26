@@ -1,8 +1,8 @@
 // models/Order.js - Modelo de pedidos para ATHENA BRAND (SEGURA, revisado)
-const mongoose = require('mongoose');
-const validator = require('validator');
-const DOMPurify = require('isomorphic-dompurify');
-const crypto = require('crypto');
+const mongoose = import('mongoose');
+const validator = import('validator');
+const DOMPurify = import('isomorphic-dompurify');
+const crypto = import('crypto');
 
 const orderSchema = new mongoose.Schema({
   user: {
@@ -535,4 +535,4 @@ orderSchema.statics.searchOrders = function(query) {
 
 const Order = mongoose.model('Order', orderSchema);
 
-module.exports = Order;
+export default Order;

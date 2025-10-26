@@ -1,6 +1,6 @@
 // models/Product.js - Modelo optimizado y seguro de productos ATHENA BRAND
-const mongoose = require('mongoose');
-const validator = require('validator');
+const mongoose = import('mongoose');
+const validator = import('validator');
 
 // Función para escapar expresiones regulares (búsquedas seguras)
 const escapeRegex = (string) => string?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') || '';
@@ -202,4 +202,4 @@ productSchema.index({ slug: 1 });
 productSchema.index({ sku: 1 });
 productSchema.index({ isFeatured: 1, createdAt: -1 });
 
-module.exports = mongoose.model('Product', productSchema);
+export default  mongoose.model('Product', productSchema);

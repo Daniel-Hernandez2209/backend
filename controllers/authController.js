@@ -1,15 +1,15 @@
 // controllers/authController.js - Controlador de autenticación para ATHENA BRAND
-const jwt = require('jsonwebtoken');
-const { validationResult } = require('express-validator');
-const User = require('../models/User');
-const sendEmail = require('../utils/sendEmail');
-const logger = require('../utils/logger');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
-const { Redis} = require('@upstash/redis');
+const jwt = import('jsonwebtoken');
+const { validationResult } = import('express-validator');
+const User = import('../models/User');
+const sendEmail = import('../utils/sendEmail');
+const logger = import('../utils/logger');
+const bcrypt = import('bcrypt');
+const crypto = import('crypto');
+const { Redis} = import('@upstash/redis');
 const redis = Redis.fromEnv();
-const validator = require('validator');
-const xss = require('xss');
+const validator = import('validator');
+const xss = import('xss');
 
 // Función para generar JWT
 const generateTokenPair = async (userId) => {
@@ -516,4 +516,4 @@ allowedUpdates.forEach(field => {
   }
 }
 
-module.exports = AuthController;
+export default  AuthController;

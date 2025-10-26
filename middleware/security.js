@@ -1,5 +1,5 @@
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const helmet = import('helmet');
+const rateLimit = import('express-rate-limit');
 
 // Create rate limit configuration
 const categoryRateLimit = rateLimit({
@@ -33,7 +33,7 @@ const configSecurity = (app) => {
   // app.use(categoryRateLimit);
 };
 
-module.exports = {
+export default  {
   configSecurity,
   categoryRateLimit
 };

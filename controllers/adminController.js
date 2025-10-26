@@ -1,6 +1,6 @@
 // controllers/adminController.js - Controlador de administración para ATHENA BRAND
-const User = require('../models/User');
-const logger = require('../utils/logger');
+const User =  import('../models/User');
+const logger = import('../utils/logger');
 
 const AdminController = {
   // Helper para manejo de errores
@@ -692,4 +692,4 @@ const AdminController = {
   }
 }
 
-module.exports = AdminController;
+export default  AdminController;
