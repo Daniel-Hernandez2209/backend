@@ -1,103 +1,184 @@
-// routes/products.js - Rutas de productos (Versión SEGURA y OPTIMIZADA)
+// routes/products.js - Rutas de productos optimizadas y seguras
 const express = require('express');
-const { body, query, param } = require('express-validator');
+const { body, param, query, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 const ProductController = require('../controllers/productController');
 const { adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ----------------------------
-// Categorías válidas
-// ----------------------------
-const VALID_CATEGORIES = ['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'];
+// ========================================
+// HEADERS DE SEGURIDAD
+// ========================================
+router.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"]
+    }
+  }
+}));
 
-// ----------------------------
-// Validaciones de rutas públicas
-// ----------------------------
-const validateGetAllProducts = [
-  query('page').optional().isInt({ min: 1, max: 1000 }).toInt(),
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
-  query('category').optional().isIn(VALID_CATEGORIES),
-  query('sizes').optional().toArray(),
-  query('inStock').optional().isIn(['true', 'false']),
-  query('minPrice').optional().isFloat({ min: 0 }).toFloat(),
-  query('maxPrice').optional().isFloat({ min: 0 }).toFloat(),
-  query('sort').optional().isIn(['price_asc', 'price_desc', 'newest', 'popular', 'name_asc', 'name_desc'])
+// ========================================
+// RATE LIMITERS
+// ========================================
+const searchLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 30,
+  message: { success: false, message: 'Demasiadas búsquedas, intente más tarde' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const adminLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 10,
+  message: { success: false, message: 'Demasiadas operaciones administrativas, intente más tarde' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ========================================
+// MIDDLEWARE DE VALIDACIÓN GLOBAL
+// ========================================
+const handleValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Errores de validación',
+      errors: errors.array().map(err => ({
+        field: err.param,
+        message: err.msg
+      }))
+    });
+  }
+  next();
+};
+
+// ========================================
+// VALIDACIONES
+// ========================================
+const productValidation = [
+  body('name')
+    .trim().escape()
+    .isLength({ min: 3, max: 100 })
+    .matches(/^[a-zA-Z0-9\sáéíóúñÁÉÍÓÚÑ\-\.]+$/)
+    .withMessage('El nombre debe tener entre 3 y 100 caracteres y contener solo caracteres válidos'),
+  body('description')
+    .trim().escape()
+    .isLength({ min: 10, max: 2000 })
+    .withMessage('La descripción debe tener entre 10 y 2000 caracteres'),
+  body('price')
+    .isFloat({ min: 0.01, max: 999999 })
+    .withMessage('El precio debe ser un número entre 0.01 y 999999'),
+  body('discountPrice')
+    .optional()
+    .isFloat({ min: 0.01, max: 999999 })
+    .withMessage('El precio con descuento debe ser un número entre 0.01 y 999999'),
+  body('category')
+    .isIn(['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'])
+    .withMessage('Categoría no válida'),
+  body('sizes')
+    .isArray({ min: 1, max: 7 })
+    .withMessage('Debe incluir entre 1 y 7 tallas'),
+  body('sizes.*.size')
+    .isIn(['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'])
+    .withMessage('Talla no válida'),
+  body('sizes.*.stock')
+    .isInt({ min: 0, max: 9999 })
+    .withMessage('Stock debe ser un número entre 0 y 9999'),
+  body('images')
+    .isArray({ min: 1, max: 10 })
+    .withMessage('Debe incluir entre 1 y 10 imágenes'),
+  body('images.*')
+    .isURL({ protocols: ['http', 'https'] })
+    .matches(/\.(jpg|jpeg|png|webp)(\?.*)?$/i)
+    .withMessage('Las imágenes deben ser URLs válidas con formato jpg, jpeg, png o webp')
 ];
 
-const validateSearchProducts = [
+const stockUpdateValidation = [
+  body('size')
+    .isIn(['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'])
+    .withMessage('Talla no válida'),
+  body('quantity')
+    .isInt({ min: 0 })
+    .withMessage('La cantidad debe ser un número entero positivo'),
+  body('operation')
+    .optional()
+    .isIn(['set', 'add', 'subtract'])
+    .withMessage('Operación no válida')
+];
+
+const searchValidation = [
   query('q')
     .trim()
-    .isLength({ min: 2, max: 100 })
-    .withMessage('La búsqueda debe tener entre 2 y 100 caracteres'),
-  query('category').optional().isIn(VALID_CATEGORIES),
-  query('limit').optional().isInt({ min: 1, max: 50 }).toInt()
-];
-
-const validateGetByCategory = [
-  param('category').isIn(VALID_CATEGORIES).withMessage('Categoría no válida'),
-  query('page').optional().isInt({ min: 1, max: 1000 }).toInt(),
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
-  query('minPrice').optional().isFloat({ min: 0 }).toFloat(),
-  query('maxPrice').optional().isFloat({ min: 0 }).toFloat(),
-  query('sort').optional().isIn(['price_asc', 'price_desc', 'newest', 'popular', 'name_asc'])
-];
-
-const validateGetBySlug = [
-  param('slug')
-    .trim()
     .isLength({ min: 1, max: 100 })
-    .matches(/^[a-z0-9-]+$/)
-    .withMessage('Slug inválido (solo letras minúsculas, números y guiones)')
+    .matches(/^[a-zA-Z0-9\sáéíóúñÁÉÍÓÚÑ\-]+$/)
+    .withMessage('Término de búsqueda no válido'),
+  query('category')
+    .optional()
+    .isIn(['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'])
+    .withMessage('Categoría no válida'),
+  query('minPrice')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Precio mínimo no válido'),
+  query('maxPrice')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('Precio máximo no válido')
 ];
 
-// ----------------------------
-// Validaciones de administrador
-// ----------------------------
-const validateProductData = [
-  body('name').trim().isLength({ min: 3, max: 100 }).withMessage('El nombre debe tener entre 3 y 100 caracteres'),
-  body('description').trim().isLength({ min: 10, max: 2000 }).withMessage('La descripción debe tener entre 10 y 2000 caracteres'),
-  body('price').isFloat({ min: 0 }).withMessage('El precio debe ser positivo'),
-  body('discountPrice').optional().isFloat({ min: 0 }).withMessage('El precio con descuento debe ser positivo'),
-  body('category').isIn(VALID_CATEGORIES).withMessage('Categoría no válida'),
-  body('sizes').isArray({ min: 1 }).withMessage('Debe incluir al menos una talla'),
-  body('sizes.*.size').isString().withMessage('Cada talla debe ser texto'),
-  body('sizes.*.stock').isInt({ min: 0 }).withMessage('El stock debe ser un número entero positivo'),
-  body('images').isArray({ min: 1 }).withMessage('Debe incluir al menos una imagen'),
-  body('images.*.url').isURL().withMessage('Cada imagen debe tener una URL válida')
+const categoryValidation = [
+  param('category')
+    .isIn(['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'])
+    .withMessage('Categoría no válida')
 ];
 
-const validateUpdateStock = [
-  param('id').isMongoId().withMessage('ID de producto inválido'),
-  body('size').isString().isLength({ min: 1, max: 10 }).withMessage('Talla inválida'),
-  body('quantity').isInt({ min: 0 }).withMessage('Cantidad debe ser un número entero positivo'),
-  body('operation').optional().isIn(['set', 'add', 'subtract']).withMessage('Operación no válida')
+const idValidation = [
+  param('id').isMongoId().withMessage('ID de producto no válido')
 ];
 
-const validateAdminGetAll = [
-  query('page').optional().isInt({ min: 1, max: 1000 }).toInt(),
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
-  query('isActive').optional().isIn(['true', 'false']),
-  query('category').optional().isIn(VALID_CATEGORIES),
-  query('search').optional().trim().isLength({ min: 2, max: 100 }).withMessage('Búsqueda entre 2 y 100 caracteres')
+const batchValidation = [
+  body('operation')
+    .isIn(['update', 'delete', 'updateStock'])
+    .withMessage('Operación no válida'),
+  body('productIds')
+    .isArray({ min: 1, max: 100 })
+    .withMessage('Debe especificar entre 1 y 100 productos'),
+  body('productIds.*')
+    .isMongoId()
+    .withMessage('ID de producto no válido'),
+  body('data')
+    .optional()
+    .isObject()
+    .withMessage('Los datos deben ser un objeto válido')
 ];
 
-// ----------------------------
-// Rutas públicas
-// ----------------------------
-router.get('/', validateGetAllProducts, ProductController.getAllProducts);
-router.get('/search', validateSearchProducts, ProductController.searchProducts);
-router.get('/category/:category', validateGetByCategory, ProductController.getProductsByCategory);
+// ========================================
+// RUTAS PÚBLICAS
+// ========================================
+router.get('/', ProductController.getAllProducts);
+router.get('/search', searchLimiter, searchValidation, handleValidation, ProductController.searchProducts);
+router.get('/category/:category', categoryValidation, handleValidation, ProductController.getProductsByCategory);
 router.get('/featured', ProductController.getFeaturedProducts);
-router.get('/:slug', validateGetBySlug, ProductController.getProductBySlug);
+router.get('/:slug', ProductController.getProductBySlug);
 
-// ----------------------------
-// Rutas administrativas
-// ----------------------------
-router.get('/admin/all', adminAuth, validateAdminGetAll, ProductController.getAllProductsAdmin);
-router.post('/', adminAuth, validateProductData, ProductController.createProduct);
-router.put('/:id', adminAuth, param('id').isMongoId().withMessage('ID inválido'), validateProductData, ProductController.updateProduct);
-router.put('/:id/stock', adminAuth, validateUpdateStock, ProductController.updateStock);
-router.delete('/:id', adminAuth, param('id').isMongoId().withMessage('ID inválido'), ProductController.deleteProduct);
+// ========================================
+// RUTAS DE ADMINISTRADOR
+// ========================================
+router.get('/admin/analytics/stats', adminAuth, ProductController.getProductStats);
+router.get('/admin/export', adminAuth, ProductController.exportProducts);
+router.get('/admin/all', adminAuth, ProductController.getAllProductsAdmin);
+
+router.post('/', adminAuth, adminLimiter, productValidation, handleValidation, ProductController.createProduct);
+router.put('/:id', adminAuth, adminLimiter, idValidation, productValidation, handleValidation, ProductController.updateProduct);
+router.delete('/:id', adminAuth, adminLimiter, idValidation, handleValidation, ProductController.deleteProduct);
+router.put('/:id/stock', adminAuth, adminLimiter, idValidation, stockUpdateValidation, handleValidation, ProductController.updateStock);
+router.post('/batch', adminAuth, adminLimiter, batchValidation, handleValidation, ProductController.batchOperations);
 
 module.exports = router;
