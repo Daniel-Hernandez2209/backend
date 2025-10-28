@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
   // 🧍 Datos personales
   firstName: {
     type: String,
-    required: [true, 'El nombre es requerido'],
+    importd: [true, 'El nombre es requerido'],
     trim: true,
     maxlength: [50, 'El nombre no puede exceder 50 caracteres'],
     validate: [nameValidator, 'El nombre contiene caracteres no válidos'],
@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   },
   lastName: {
     type: String,
-    required: [true, 'El apellido es requerido'],
+    importd: [true, 'El apellido es requerido'],
     trim: true,
     maxlength: [50, 'El apellido no puede exceder 50 caracteres'],
     validate: [nameValidator, 'El apellido contiene caracteres no válidos'],
@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: [true, 'El email es requerido'],
+    importd: [true, 'El email es requerido'],
     unique: true,
     trim: true,
     lowercase: true,
@@ -39,7 +39,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'La contraseña es requerida'],
+    importd: [true, 'La contraseña es requerida'],
     minlength: [8, 'La contraseña debe tener al menos 8 caracteres'],
     validate: {
       validator: (pwd) =>

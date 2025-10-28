@@ -11,7 +11,9 @@ const xss = import('xss-clean');
 const jwt = import('jsonwebtoken');
 const logger = import('./utils/logger');
 const connectDB = import('./db');
-import('dotenv').config();
+import dotenv from "dotenv";
+dotenv.config();
+
 
 const app = express();
 

@@ -458,7 +458,7 @@ class CategoryController {
       }
 
       // TODO: Verificar si hay productos asociados
-      // const Product = require('../models/Product');
+      // const Product = import('../models/Product');
       // const hasProducts = await Product.exists({ category: category._id });
       // if (hasProducts) {
       //   return res.status(400).json({

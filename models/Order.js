@@ -8,7 +8,7 @@ const orderSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: false
+    importd: false
   },
 
   guestInfo: {
@@ -62,7 +62,7 @@ const orderSchema = new mongoose.Schema({
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
-      required: true
+      importd: true
     },
     productSnapshot: {
       name: String,
@@ -72,22 +72,22 @@ const orderSchema = new mongoose.Schema({
     },
     size: {
       type: String,
-      required: true,
+      importd: true,
       enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
     },
     quantity: {
       type: Number,
-      required: true,
+      importd: true,
       min: [1, 'La cantidad debe ser al menos 1']
     },
     unitPrice: {
       type: Number,
-      required: true,
+      importd: true,
       min: [0, 'El precio unitario no puede ser negativo']
     },
     subtotal: {
       type: Number,
-      required: true,
+      importd: true,
       min: [0, 'El subtotal no puede ser negativo']
     }
   }],
@@ -95,7 +95,7 @@ const orderSchema = new mongoose.Schema({
   shippingAddress: {
     firstName: { 
       type: String, 
-      required: true,
+      importd: true,
       maxlength: [50, 'Nombre demasiado largo'],
       validate: {
         validator: function(name) {
@@ -106,7 +106,7 @@ const orderSchema = new mongoose.Schema({
     },
     lastName: { 
       type: String, 
-      required: true,
+      importd: true,
       maxlength: [50, 'Apellido demasiado largo'],
       validate: {
         validator: function(name) {
@@ -117,17 +117,17 @@ const orderSchema = new mongoose.Schema({
     },
     street: { 
       type: String, 
-      required: true,
+      importd: true,
       maxlength: [200, 'Dirección demasiado larga']
     },
     city: { 
       type: String, 
-      required: true,
+      importd: true,
       maxlength: [100, 'Ciudad demasiado larga']
     },
     department: { 
       type: String, 
-      required: true,
+      importd: true,
       maxlength: [100, 'Departamento demasiado largo']
     },
     zipCode: { 
@@ -153,17 +153,17 @@ const orderSchema = new mongoose.Schema({
   pricing: {
     subtotal: {
       type: Number,
-      required: true,
+      importd: true,
       min: [0, 'El subtotal no puede ser negativo']
     },
     shipping: {
       type: Number,
-      required: true,
+      importd: true,
       min: [0, 'El costo de envío no puede ser negativo']
     },
     tax: {
       type: Number,
-      required: true,
+      importd: true,
       min: [0, 'Los impuestos no pueden ser negativos'],
       default: 0
     },
@@ -174,7 +174,7 @@ const orderSchema = new mongoose.Schema({
     },
     total: {
       type: Number,
-      required: true,
+      importd: true,
       min: [0, 'El total no puede ser negativo']
     }
   },
@@ -207,7 +207,7 @@ const orderSchema = new mongoose.Schema({
     method: {
       type: String,
       enum: ['pse', 'cash_on_delivery', 'bank_transfer'],
-      required: true
+      importd: true
     },
     status: {
       type: String,
