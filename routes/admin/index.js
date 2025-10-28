@@ -1,14 +1,14 @@
 // routes/admin/index.js - Router principal de admin
-const express = require('express');
-const AdminController = require('../../controllers/adminController');
-const { auth, adminAuth } = require('../../middleware/auth');
-const { adminWriteLimiter } = require('../../middleware/rateLimiter');
+const express = import('express');
+const AdminController = import('../../controllers/adminController');
+const { auth, adminAuth } = import('../../middleware/auth');
+const { adminWriteLimiter } = import('../../middleware/rateLimiter');
 
 const router = express.Router();
 
 // Sub-routers
-const usersRouter = require('./user');
-const categoriesRouter = require('./categories');
+const usersRouter = import('./user');
+const categoriesRouter = import('./categories');
 
 // Aplicar auth global a todas las rutas admin
 router.use(auth);
@@ -46,4 +46,4 @@ router.get('/dashboard',
   }
 );
 
-module.exports = router;
+export default router;

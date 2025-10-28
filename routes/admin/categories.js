@@ -1,9 +1,9 @@
 // routes/admin/categories.js - Rutas administrativas
-const express = require('express');
+const express = import('express');
 const router = express.Router();
-const CategoryController = require('../../controllers/categoryController');
-const { adminAuth } = require('../../middleware/auth');
-const { adminWriteLimiter, criticalAdminLimiter } = require('../../middleware/rateLimiter');
+const CategoryController = import('../../controllers/categoryController');
+const { adminAuth } = import('../../middleware/auth');
+const { adminWriteLimiter, criticalAdminLimiter } = import('../../middleware/rateLimiter');
 
 // Aplicar adminAuth a todas las rutas de este router
 router.use(adminAuth);
@@ -15,4 +15,4 @@ router.put('/:slug', criticalAdminLimiter, CategoryController.updateCategory);
 router.delete('/:slug', criticalAdminLimiter, CategoryController.deleteCategory);
 router.put('/:slug/toggle', criticalAdminLimiter, CategoryController.toggleCategory);
 
-module.exports = router;
+export default  router;

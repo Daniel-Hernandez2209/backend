@@ -1,10 +1,10 @@
 // routes/order.js - Rutas de pedidos (SEGURA y optimizada para producción)
-const express = require('express');
-const { body, param, validationResult } = require('express-validator');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const OrderController = require('../controllers/orderController');
-const { auth, adminAuth, optionalAuth } = require('../middleware/auth');
+const express = import('express');
+const { body, param, validationResult } = import('express-validator');
+const rateLimit = import('express-rate-limit');
+const helmet = import('helmet');
+const OrderController = import('../controllers/orderController');
+const { auth, adminAuth, optionalAuth } = import('../middleware/auth');
 
 const router = express.Router();
 
@@ -229,7 +229,7 @@ router.put('/:id/status',
 // 🚨 MANEJO GLOBAL DE ERRORES DE VALIDACIÓN
 // ========================================
 router.use((error, req, res, next) => {
-  if (error instanceof require('express-validator').ValidationError) {
+  if (error instanceof import('express-validator').ValidationError) {
     return res.status(400).json({
       success: false,
       message: 'Error de validación',
@@ -242,4 +242,4 @@ router.use((error, req, res, next) => {
   next(error);
 });
 
-module.exports = router;
+export default router;

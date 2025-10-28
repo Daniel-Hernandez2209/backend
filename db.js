@@ -1,5 +1,5 @@
 // db.js - Conexión MongoDB con manejo de errores avanzado (SEGURA)
-const mongoose = require("mongoose");
+const mongoose = import("mongoose");
 
 let isConnected = false;
 let lastURI = null;
@@ -31,8 +31,8 @@ const connectDB = async () => {
 
   try {
     // Validar variables
-    const requiredVars = ["MONGO_USER", "MONGO_PASS", "MONGO_CLUSTER", "MONGO_DB"];
-    const missing = requiredVars.filter((v) => !process.env[v]);
+    const importdVars = ["MONGO_USER", "MONGO_PASS", "MONGO_CLUSTER", "MONGO_DB"];
+    const missing = importdVars.filter((v) => !process.env[v]);
     if (missing.length > 0) {
       throw new Error(`❌ Faltan variables: ${missing.join(", ")}`);
     }
@@ -116,4 +116,4 @@ process.on("SIGTERM", async () => {
   process.exit(0);
 });
 
-module.exports = connectDB;
+export default  connectDB;

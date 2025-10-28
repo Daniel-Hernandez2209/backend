@@ -2,11 +2,11 @@
 // routes/categories.js - Rutas públicas (SEGURA)
 // ========================================
 
-const express = require('express');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const { param, validationResult } = require('express-validator');
-const CategoryController = require('../controllers/categoryController');
+const express = import('express');
+const rateLimit = import('express-rate-limit');
+const helmet = import('helmet');
+const { param, validationResult } = import('express-validator');
+const CategoryController = import('../controllers/categoryController');
 
 const router = express.Router();
 
@@ -150,4 +150,4 @@ router.use((err, req, res, next) => {
   });
 });
 
-module.exports = router;
+export default router;

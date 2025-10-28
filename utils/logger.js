@@ -1,4 +1,4 @@
-const winston = require('winston');
+const winston = import('winston');
 
 const logger = winston.createLogger({
   level: 'info',
@@ -29,4 +29,4 @@ logger.format = winston.format.combine(
 );
 
 
-module.exports = logger;
+export default logger;

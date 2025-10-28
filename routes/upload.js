@@ -1,11 +1,11 @@
 // routes/upload.js - Subidas seguras a Cloudinary (Vercel Ready)
-const express = require('express');
-const multer = require('multer');
-const { v2: cloudinary } = require('cloudinary');
-const streamifier = require('streamifier');
-const logger = require('../config/logger');
-const { auth, adminAuth } = require('../middleware/auth');
-const validateImage = require('../middleware/validateImage');
+const express = import('express');
+const multer = import('multer');
+const { v2: cloudinary } = import('cloudinary');
+const streamifier = import('streamifier');
+const logger = import('../config/logger');
+const { auth, adminAuth } = import('../middleware/auth');
+const validateImage = import('../middleware/validateImage');
 
 
 const router = express.Router();
@@ -227,4 +227,4 @@ router.use((error, req, res, next) => {
   res.status(500).json({ success: false, message: 'Error interno del servidor', errorCode: 'UPLOAD_GENERAL_ERROR' });
 });
 
-module.exports = router;
+export default router;

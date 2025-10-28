@@ -1,10 +1,10 @@
 // routes/products.js - Rutas de productos optimizadas y seguras
-const express = require('express');
-const { body, param, query, validationResult } = require('express-validator');
-const rateLimit = require('express-rate-limit');
-const helmet = require('helmet');
-const ProductController = require('../controllers/productController');
-const { adminAuth } = require('../middleware/auth');
+const express = import('express');
+const { body, param, query, validationResult } = import('express-validator');
+const rateLimit = import('express-rate-limit');
+const helmet = import('helmet');
+const ProductController = import('../controllers/productController');
+const { adminAuth } = import('../middleware/auth');
 
 const router = express.Router();
 
@@ -181,4 +181,4 @@ router.delete('/:id', adminAuth, adminLimiter, idValidation, handleValidation, P
 router.put('/:id/stock', adminAuth, adminLimiter, idValidation, stockUpdateValidation, handleValidation, ProductController.updateStock);
 router.post('/batch', adminAuth, adminLimiter, batchValidation, handleValidation, ProductController.batchOperations);
 
-module.exports = router;
+export default router;

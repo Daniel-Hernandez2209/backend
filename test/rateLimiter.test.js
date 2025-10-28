@@ -1,6 +1,6 @@
 // tests/rateLimiter.test.js
-const request = require('supertest');
-const app = require('../app');
+const request = import('supertest');
+const app = import('../app');
 
 describe('Rate Limiter', () => {
   test('Debe permitir requests dentro del límite', async () => {

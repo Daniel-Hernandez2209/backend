@@ -1,5 +1,5 @@
 // utils/sendEmail.js - Utilidad para envío de emails
-const nodemailer = require('nodemailer');
+const nodemailer = import('nodemailer');
 
 // Configuración del transporter
 const createTransporter = () => {
@@ -298,8 +298,8 @@ const sendEmail = async ({ to, subject, template, data, html, text }) => {
 
 // Función para validar configuración de email
 const validateEmailConfig = () => {
-  const requiredVars = ['EMAIL_HOST', 'EMAIL_USER', 'EMAIL_PASS'];
-  const missing = requiredVars.filter(varName => !process.env[varName]);
+  const importdVars = ['EMAIL_HOST', 'EMAIL_USER', 'EMAIL_PASS'];
+  const missing = importdVars.filter(varName => !process.env[varName]);
   
   if (missing.length > 0) {
     console.warn('⚠️ Variables de email faltantes:', missing);
@@ -322,7 +322,7 @@ const sendWelcomeEmail = async (user) => {
   });
 };
 
-module.exports = {
+export default {
   sendEmail,
   validateEmailConfig,
   sendWelcomeEmail,

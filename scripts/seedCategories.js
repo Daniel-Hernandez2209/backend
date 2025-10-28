@@ -1,7 +1,7 @@
 // scripts/seedCategories.js
-const mongoose = require('mongoose');
-const Category = require('../models/category');
-require('dotenv').config();
+const mongoose = import('mongoose');
+const Category = import('../models/category');
+import('dotenv').config();
 
 // Datos originales de las categorías
 const athenaCategories = [

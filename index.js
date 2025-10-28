@@ -1,8 +1,8 @@
 // index.js - Entry point optimizado para Vercel (SEGURA)
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const app = require('./server');
-const connectDB = require('./db');
+const helmet = import('helmet');
+const rateLimit = import('express-rate-limit');
+const app = import('./server');
+const connectDB = import('./db');
 
 // ========================================
 // UTILIDADES DE ERRORES
@@ -110,7 +110,7 @@ app.use(async (req, res, next) => {
 // ========================================
 // EXPORTACIÓN PARA VERCEL
 // ========================================
-module.exports = app;
+export default app;
 
 // ========================================
 // SERVIDOR LOCAL (DESARROLLO)

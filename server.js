@@ -1,17 +1,17 @@
 // server.js - Backend principal optimizado para Vercel (SEGURA Y ESTABLE)
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const compression = require('compression');
-const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
-const jwt = require('jsonwebtoken');
-const logger = require('./utils/logger');
-const connectDB = require('./db');
-require('dotenv').config();
+const express = import('express');
+const mongoose = import('mongoose');
+const cors = import('cors');
+const helmet = import('helmet');
+const morgan = import('morgan');
+const compression = import('compression');
+const rateLimit = import('express-rate-limit');
+const mongoSanitize = import('express-mongo-sanitize');
+const xss = import('xss-clean');
+const jwt = import('jsonwebtoken');
+const logger = import('./utils/logger');
+const connectDB = import('./db');
+import('dotenv').config();
 
 const app = express();
 
@@ -155,13 +155,13 @@ app.get('/health', (req, res) => {
 });
 
 // Importar rutas
-const adminRoutes = require('./routes/admin/user');
-const authRoutes = require('./routes/auth');
-const productRoutes = require('./routes/products');
-const orderRoutes = require('./routes/order');
-const uploadRoutes = require('./routes/upload');
-const categoryRoutes = require('./routes/categories');
-const adminCategoryRoutes = require('./routes/admin/categories');
+const adminRoutes = import('./routes/admin/user');
+const authRoutes = import('./routes/auth');
+const productRoutes = import('./routes/products');
+const orderRoutes = import('./routes/order');
+const uploadRoutes = import('./routes/upload');
+const categoryRoutes = import('./routes/categories');
+const adminCategoryRoutes = import('./routes/admin/categories');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
@@ -257,4 +257,4 @@ app.use('*', (req, res) => {
   res.status(404).json(response);
 });
 
-module.exports = app;
+export default app;
