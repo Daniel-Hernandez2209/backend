@@ -1,5 +1,6 @@
 // middleware/rateLimiter.js
-const rateLimit = import('express-rate-limit');
+import rateLimit from 'express-rate-limit';
+
 
 // ============================================
 // RATE LIMITERS POR TIPO DE OPERACIÓN

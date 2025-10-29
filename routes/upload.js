@@ -1,11 +1,10 @@
 // routes/upload.js - Subidas seguras a Cloudinary (Vercel Ready)
-const express = import('express');
-const multer = import('multer');
-const { v2: cloudinary } = import('cloudinary');
-const streamifier = import('streamifier');
-const logger = import('../config/logger');
-const { auth, adminAuth } = import('../middleware/auth');
-const validateImage = import('../middleware/validateImage');
+import express from 'express';
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import streamifier from 'streamifier';
+import { auth, adminAuth } from '../middleware/auth.js';
+import logger from '../utils/logger.js';
 
 
 const router = express.Router();

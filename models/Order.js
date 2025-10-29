@@ -1,8 +1,9 @@
 // models/Order.js - Modelo de pedidos para ATHENA BRAND (SEGURA, revisado)
-const mongoose = import('mongoose');
-const validator = import('validator');
-const DOMPurify = import('isomorphic-dompurify');
-const crypto = import('crypto');
+import mongoose from "mongoose";
+import validator from "validator";
+import DOMPurify from "isomorphic-dompurify";
+import crypto from "crypto";
+
 
 const orderSchema = new mongoose.Schema({
   user: {

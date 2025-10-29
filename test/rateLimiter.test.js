@@ -1,6 +1,10 @@
 // tests/rateLimiter.test.js
-const request = import('supertest');
-const app = import('../app');
+import request from 'supertest';
+import express from 'express';
+import { publicReadLimiter } from '../middleware/rateLimiter.js';
+
+const app = express();
+app.use(publicReadLimiter);
 
 describe('Rate Limiter', () => {
   test('Debe permitir requests dentro del límite', async () => {

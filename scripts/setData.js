@@ -1,10 +1,12 @@
 // scripts/seedData.js - Datos de prueba para ATHENA BRAND
-import('dotenv').config();
-const mongoose = import('mongoose');
-const bcrypt = import('bcryptjs');
-const Product = import('../models/Product');
-const User = import('../models/User');
-const slugify = import('slugify');
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';  
+import bcrypt from 'bcryptjs'; 
+import Product from '../models/Product.js';
+import User from '../models/User.js';
+import slugify from 'slugify';
+dotenv.config({ path: '../.env' });
+
 
 // Configuración de slugify
 const slugConfig = {

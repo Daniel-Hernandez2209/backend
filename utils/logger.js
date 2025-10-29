@@ -1,4 +1,5 @@
-const winston = import('winston');
+// utils/logger.js - Configuración avanzada de Winston con filtrado de datos sensibles
+import winston from 'winston';
 
 const logger = winston.createLogger({
   level: 'info',

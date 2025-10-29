@@ -1,5 +1,5 @@
 // models/Category.js
-const mongoose = import('mongoose');
+import mongoose from "mongoose";
 
 const subcategorySchema = new mongoose.Schema({
   name: {

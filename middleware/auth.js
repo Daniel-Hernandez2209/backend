@@ -1,9 +1,10 @@
 // middleware/auth.js - Middleware de autenticación
 // middleware/auth.js - Middleware de autenticación
-const jwt = import('jsonwebtoken');
-const User = import('../models/User');
-const mongoose = import('mongoose');
-const rateLimit = import('express-rate-limit');
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import mongoose from "mongoose";
+import rateLimit from "express-rate-limit";
+
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos

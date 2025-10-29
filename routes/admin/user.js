@@ -1,9 +1,10 @@
 // routes/admin.js - Rutas de administrador
-const express = import('express');
+import express from 'express';
+import AdminController from '../../controllers/adminController.js';
+import { auth, adminAuth } from '../../middleware/auth.js';
+import rateLimit from 'express-rate-limit';
+
 const router = express.Router();
-const { auth, adminAuth } = import('../../middleware/auth');
-const rateLimit = import('express-rate-limit');
-const AdminController = import('../../controllers/adminController');
 
 // Rate limiter para admin
 const adminLimiter = rateLimit({

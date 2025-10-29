@@ -1,5 +1,5 @@
 // db.js - Conexión MongoDB con manejo de errores avanzado (SEGURA)
-const mongoose = import("mongoose");
+import mongoose from "mongoose";
 
 let isConnected = false;
 let lastURI = null;

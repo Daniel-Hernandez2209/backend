@@ -1,6 +1,6 @@
 // controllers/adminController.js - Controlador de administración para ATHENA BRAND
-const User =  import('../models/User');
-const logger = import('../utils/logger');
+import User from '../models/User.js';
+import logger from '../utils/logger.js';
 
 const AdminController = {
   // Helper para manejo de errores

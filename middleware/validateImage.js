@@ -1,6 +1,6 @@
 // middleware/validateImage.js
-const sharp = import('sharp');
-const path = import('path');
+import sharp from 'sharp';
+import path from 'path';
 
 /**
  * Middleware avanzado para validar imágenes antes de subirlas a Cloudinary.

@@ -1,8 +1,8 @@
 // controllers/productController.js - Controlador de productos para ATHENA BRAND (refactorizado, seguro)
-const Product = import('../models/Product');
-const { validationResult } = import('express-validator');
-const logger = import('../config/logger');
-const mongoose = import('mongoose');
+import Product from "../models/Product.js";
+import { validationResult } from "express-validator";
+import logger from "../config/logger.js";
+import mongoose from "mongoose";
 
 // -----------------------------
 // Config / Constantes

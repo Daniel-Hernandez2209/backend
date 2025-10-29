@@ -1,9 +1,12 @@
 // routes/admin/categories.js - Rutas administrativas
-const express = import('express');
+import express from 'express';
+import CategoryController from '../../controllers/categoryController.js';
+import { adminAuth } from '../../middleware/auth.js';
+import { adminWriteLimiter, criticalAdminLimiter } from '../../middleware/rateLimiter.js';
+
 const router = express.Router();
-const CategoryController = import('../../controllers/categoryController');
-const { adminAuth } = import('../../middleware/auth');
-const { adminWriteLimiter, criticalAdminLimiter } = import('../../middleware/rateLimiter');
+
+
 
 // Aplicar adminAuth a todas las rutas de este router
 router.use(adminAuth);

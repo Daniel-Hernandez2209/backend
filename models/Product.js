@@ -1,6 +1,6 @@
 // models/Product.js - Modelo optimizado y seguro de productos ATHENA BRAND
-const mongoose = import('mongoose');
-const validator = import('validator');
+import mongoose from "mongoose";
+import validator from "validator";
 
 // Función para escapar expresiones regulares (búsquedas seguras)
 const escapeRegex = (string) => string?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') || '';

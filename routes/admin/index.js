@@ -1,8 +1,8 @@
 // routes/admin/index.js - Router principal de admin
-const express = import('express');
-const AdminController = import('../../controllers/adminController');
-const { auth, adminAuth } = import('../../middleware/auth');
-const { adminWriteLimiter } = import('../../middleware/rateLimiter');
+import express from 'express';
+import AdminController from '../../controllers/adminController.js';
+import { auth, adminAuth } from '../../middleware/auth.js';
+import { adminWriteLimiter } from '../../middleware/rateLimiter.js';
 
 const router = express.Router();
 

@@ -1,5 +1,5 @@
 // utils/sendEmail.js - Utilidad para envío de emails
-const nodemailer = import('nodemailer');
+import nodemailer from 'nodemailer';
 
 // Configuración del transporter
 const createTransporter = () => {

@@ -1,11 +1,10 @@
 // routes/auth.js - Rutas de autenticación con seguridad avanzada
-const express = import('express');
-const { body } = import('express-validator');
-const rateLimit = import('express-rate-limit');
-const helmet = import('helmet');
-const AuthController = import('../controllers/authController');
-const { auth } = import('../middleware/auth');
-const { validationResult } = import('express-validator');
+import express from 'express';
+import { body, validationResult } from 'express-validator';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import AuthController from '../controllers/authController.js';
+import { auth } from '../middleware/auth.js';
 
 const router = express.Router();
 

@@ -1,5 +1,5 @@
-const helmet = import('helmet');
-const rateLimit = import('express-rate-limit');
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 // Create rate limit configuration
 const categoryRateLimit = rateLimit({

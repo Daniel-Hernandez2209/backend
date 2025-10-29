@@ -1,10 +1,10 @@
 // routes/order.js - Rutas de pedidos (SEGURA y optimizada para producción)
-const express = import('express');
-const { body, param, validationResult } = import('express-validator');
-const rateLimit = import('express-rate-limit');
-const helmet = import('helmet');
-const OrderController = import('../controllers/orderController');
-const { auth, adminAuth, optionalAuth } = import('../middleware/auth');
+import express from 'express';
+import { body, param, validationResult } from 'express-validator';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import OrderController from '../controllers/orderController.js';
+import { auth, adminAuth, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 

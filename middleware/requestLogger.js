@@ -1,5 +1,5 @@
 // middleware/requestLogger.js
-const logger = import('../utils/logger');
+import logger from '../utils/logger';
 
 const requestLogger = (req, res, next) => {
   const start = Date.now();

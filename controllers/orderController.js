@@ -1,11 +1,12 @@
 // controllers/orderController.js - Controlador de pedidos para ATHENA BRAND
-const { validationResult, query } = import('express-validator');
-const Order = import('../models/Order');
-const Product = import('../models/Product');
-const logger = import('../config/logger'); 
-const crypto = import('crypto');
-const sendEmail = import('../utils/sendEmail');
-const mongoose = import('mongoose');
+import { validationResult, query } from "express-validator";
+import Order from "../models/Order.js";
+import Product from "../models/Product.js";
+import logger from "../config/logger.js";
+import crypto from "crypto";
+import sendEmail from "../utils/sendEmail.js";
+import mongoose from "mongoose";
+
 
 class OrderController {
   // POST /api/orders - Crear nuevo pedido

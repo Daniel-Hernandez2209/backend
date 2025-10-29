@@ -1,8 +1,13 @@
 // index.js - Entry point optimizado para Vercel (SEGURA)
-const helmet = import('helmet');
-const rateLimit = import('express-rate-limit');
-const app = import('./server');
-const connectDB = import('./db');
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import { connectDB } from './db.js';
+
+const app = express();
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ========================================
 // UTILIDADES DE ERRORES

@@ -1,10 +1,10 @@
 // routes/products.js - Rutas de productos optimizadas y seguras
-const express = import('express');
-const { body, param, query, validationResult } = import('express-validator');
-const rateLimit = import('express-rate-limit');
-const helmet = import('helmet');
-const ProductController = import('../controllers/productController');
-const { adminAuth } = import('../middleware/auth');
+import express from 'express';
+import { body, param, query, validationResult } from 'express-validator';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import ProductController from '../controllers/productController.js';
+import { adminAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 

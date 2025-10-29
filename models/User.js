@@ -1,9 +1,10 @@
 // models/User.js - Modelo de usuarios para ATHENA BRAND (Optimizado y Seguro)
-const mongoose = import('mongoose');
-const bcrypt = import('bcryptjs');
-const crypto = import('crypto');
-const validator = import('validator');
-const DOMPurify = import('isomorphic-dompurify');
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
+import validator from "validator";
+import crypto from "crypto";
+import DOMPurify from "isomorphic-dompurify";
+
 
 // ✅ Validador reutilizable para nombres
 const nameValidator = (name) => /^[a-zA-ZÀ-ÿ\s\-']+$/u.test(name);
