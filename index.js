@@ -2,8 +2,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import { connectDB } from './db.js';
-
+import connectDB from "./db.js";  
 const app = express();
 
 app.use(express.json());

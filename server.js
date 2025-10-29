@@ -10,7 +10,7 @@ import mongoSanitize from "express-mongo-sanitize";
 import xss from "xss-clean";
 import dotenv from "dotenv";
 import logger from "./utils/logger.js";
-import {connectDB} from "./db.js";
+import connectDB from "./db.js";  
 
 dotenv.config();
 
