@@ -1,18 +1,19 @@
 // server.js - Backend principal optimizado para Vercel (SEGURA Y ESTABLE)
 import express from "express";
-const mongoose = import('mongoose');
-const cors = import('cors');
-const helmet = import('helmet');
-const morgan = import('morgan');
-const compression = import('compression');
-const rateLimit = import('express-rate-limit');
-const mongoSanitize = import('express-mongo-sanitize');
-const xss = import('xss-clean');
-const jwt = import('jsonwebtoken');
-const logger = import('./utils/logger');
-const connectDB = import('./db');
+import mongoose from "mongoose";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
+import mongoSanitize from "express-mongo-sanitize";
+import xss from "xss-clean";
 import dotenv from "dotenv";
+import logger from "./utils/logger.js";
+import connectDB from "./db.js";
+
 dotenv.config();
+
 
 
 const app = express();
