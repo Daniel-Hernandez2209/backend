@@ -11,8 +11,7 @@ import xss from "xss-clean";
 import dotenv from "dotenv";
 import logger from "./utils/logger.js";
 import connectDB from "./db.js";  
-import globalLimiter from "./middleware/rateLimiter.js";
-import authLimiter from "./middleware/rateLimiter.js";
+import {globalLimiter,authLimiter} from "./middleware/rateLimiter.js";
 dotenv.config();
 
 

@@ -6,7 +6,7 @@ import sendEmail from "../utils/sendEmail.js";
 import logger from "../utils/logger.js";
 import bcrypt from "bcryptjs";       // RECOMENDADO EN LUGAR DE bcrypt
 import crypto from "crypto";
-import { Redis } from "@upstash/redis";
+import { redis } from "@upstash/redis";
 import validator from "validator";
 import xss from "xss";
 

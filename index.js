@@ -1,6 +1,6 @@
 // index.js - Entry point optimizado para Vercel (SEGURA)
 import express from 'express';
-import globalLimiter from './middleware/rateLimiter.js';
+import rateLimiters from './middleware/rateLimiter.js';
 import helmet from 'helmet';
 import connectDB from "./db.js";  
 const app = express();
@@ -43,7 +43,7 @@ app.use(helmet({
 }));
 // ========================================
 // RATE LIMITING GLOBAL
-  app.use(globalLimiter);
+  app.use(rateLimiters.globalLimiter);
 // ========================================
 
 
