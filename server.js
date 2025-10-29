@@ -1,5 +1,5 @@
 // server.js - Backend principal optimizado para Vercel (SEGURA Y ESTABLE)
-const express = import('express');
+import express from "express";
 const mongoose = import('mongoose');
 const cors = import('cors');
 const helmet = import('helmet');
