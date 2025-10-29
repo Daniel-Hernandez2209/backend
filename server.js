@@ -7,7 +7,7 @@ import morgan from "morgan";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
-import xss from "xss";
+import xss from "xss-clean";
 import dotenv from "dotenv";
 import logger from "./utils/logger.js";
 import connectDB from "./db.js";  
