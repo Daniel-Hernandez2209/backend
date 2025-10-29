@@ -11,7 +11,8 @@ import xss from "xss";
 import dotenv from "dotenv";
 import logger from "./utils/logger.js";
 import connectDB from "./db.js";  
-
+import globalLimiter from "./middleware/rateLimiter.js";
+import authLimiter from "./middleware/rateLimiter.js";
 dotenv.config();
 
 
@@ -53,23 +54,8 @@ if (process.env.NODE_ENV === 'development') {
 // 🚦 RATE LIMITING GLOBAL Y ESPECÍFICO
 // ===========================================
 
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-   validate: { xForwardedForHeader: false } 
-});
 app.use('/api', globalLimiter);
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { success: false, message: 'Demasiados intentos de login. Intenta más tarde.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 app.use('/api/auth/login', authLimiter);
 
 // Limiter adicional para área administrativa

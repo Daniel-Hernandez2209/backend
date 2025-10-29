@@ -1,6 +1,6 @@
 // index.js - Entry point optimizado para Vercel (SEGURA)
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import globalLimiter from './middleware/rateLimiter.js';
 import helmet from 'helmet';
 import connectDB from "./db.js";  
 const app = express();
@@ -41,22 +41,11 @@ app.use(helmet({
     preload: true
   }
 }));
-
 // ========================================
 // RATE LIMITING GLOBAL
+  app.use(globalLimiter);
 // ========================================
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 300, // máximo 300 peticiones por IP
-  message: {
-    success: false,
-    message: "Demasiadas solicitudes, intenta más tarde"
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
 
-app.use(globalLimiter);
 
 // ========================================
 // CONEXIÓN A BASE DE DATOS

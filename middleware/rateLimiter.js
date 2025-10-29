@@ -5,6 +5,15 @@ import rateLimit from 'express-rate-limit';
 // ============================================
 // RATE LIMITERS POR TIPO DE OPERACIÓN
 // ============================================
+// Limitador global básico
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+   validate: { xForwardedForHeader: false } 
+});
 
 // Para rutas públicas generales (lectura)
 const publicReadLimiter = rateLimit({
@@ -54,6 +63,15 @@ const adminWriteLimiter = rateLimit({
   },
    validate: { xForwardedForHeader: false } 
 });
+// Para rutas de autenticación (login, registro)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Demasiados intentos de login. Intenta más tarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }
+});
 
 // Para operaciones críticas de admin (toggle, delete)
 const criticalAdminLimiter = rateLimit({
@@ -88,6 +106,8 @@ const seoLimiter = rateLimit({
 
 export default  {
   publicReadLimiter,
+  authLimiter,
+  globalLimiter,
   heavyReadLimiter,
   adminWriteLimiter,
   criticalAdminLimiter,
