@@ -158,14 +158,14 @@ app.get('/health', (req, res) => {
 });
 
 // Importar rutas
-const adminRoutes = import('./routes/admin/user');
-const authRoutes = import('./routes/auth');
-const productRoutes = import('./routes/products');
-const orderRoutes = import('./routes/order');
-const uploadRoutes = import('./routes/upload');
-const categoryRoutes = import('./routes/categories');
-const adminCategoryRoutes = import('./routes/admin/categories');
-
+import adminRoutes from './routes/admin/user.js';
+import authRoutes from './routes/auth.js';
+import productRoutes from './routes/products.js';
+import orderRoutes from './routes/order.js';
+import uploadRoutes from './routes/upload.js';
+import categoryRoutes from './routes/categories.js';
+import adminCategoryRoutes from './routes/admin/categories.js';
+// Usar rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
