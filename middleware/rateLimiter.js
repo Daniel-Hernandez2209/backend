@@ -21,6 +21,7 @@ const publicReadLimiter = rateLimit({
     // Ejemplo: no aplicar rate limit a IPs internas
     return req.ip === '127.0.0.1';
   },
+   validate: { xForwardedForHeader: false } 
 });
 
 // Para endpoints que consumen más recursos (búsquedas, stats)
@@ -33,6 +34,7 @@ const heavyReadLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+   validate: { xForwardedForHeader: false } 
 });
 
 // Para rutas administrativas (escritura)
@@ -49,7 +51,8 @@ const adminWriteLimiter = rateLimit({
   keyGenerator: (req) => {
     // Si tienes el user ID del admin autenticado
     return req.user?.id || req.ip;
-  }
+  },
+   validate: { xForwardedForHeader: false } 
 });
 
 // Para operaciones críticas de admin (toggle, delete)
@@ -62,6 +65,7 @@ const criticalAdminLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+   validate: { xForwardedForHeader: false } 
 });
 
 // Rate limiter específico para SEO/bots (más permisivo)
@@ -78,7 +82,8 @@ const seoLimiter = rateLimit({
     // Permitir bots conocidos sin límite estricto
     const userAgent = req.get('user-agent') || '';
     return /googlebot|bingbot|yandex/i.test(userAgent);
-  }
+  },
+   validate: { xForwardedForHeader: false } 
 });
 
 export default  {

@@ -59,6 +59,7 @@ const globalLimiter = rateLimit({
   message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
+   validate: { xForwardedForHeader: false } 
 });
 app.use('/api', globalLimiter);
 
