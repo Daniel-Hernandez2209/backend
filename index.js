@@ -3,7 +3,9 @@ import express from 'express';
 import rateLimiters from './middleware/rateLimiter.js';
 import helmet from 'helmet';
 import connectDB from "./db.js";  
+
 const app = express();
+app.set('trust proxy', 1); // ⚠️ CRÍTICO PRIMERO
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -23,7 +25,7 @@ const sanitizeError = (error) => ({
 // SEGURIDAD GLOBAL
 // ========================================
 app.use(helmet({
-  crossOriginEmbedderPolicy: false, // necesario para Vercel/Next.js
+  crossOriginEmbedderPolicy: false,
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
@@ -36,16 +38,16 @@ app.use(helmet({
     }
   },
   hsts: {
-    maxAge: 31536000, // 1 año
+    maxAge: 31536000,
     includeSubDomains: true,
     preload: true
   }
 }));
+
 // ========================================
 // RATE LIMITING GLOBAL
-  app.use(rateLimiters.globalLimiter);
+app.use(rateLimiters.globalLimiter);
 // ========================================
-
 
 // ========================================
 // CONEXIÓN A BASE DE DATOS
@@ -64,17 +66,14 @@ const initializeDB = async () => {
   }
 };
 
-// Inicializar conexión una vez (para dev)
 if (process.env.NODE_ENV !== 'production') {
   initializeDB();
 }
 
-// Middleware para asegurar conexión en Vercel (serverless)
 app.use(async (req, res, next) => {
   try {
     if (!dbInitialized) await initializeDB();
 
-    // Limitar tamaño del body para seguridad
     if (req.body && JSON.stringify(req.body).length > 100000) {
       return res.status(413).json({
         success: false,
@@ -98,6 +97,52 @@ app.use(async (req, res, next) => {
       errorId
     });
   }
+});
+
+// ========================================
+// 🚀 RUTAS DE LA API
+// ========================================
+
+// Health check
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Importar rutas
+import adminRoutes from './routes/admin/user.js';
+import authRoutes from './routes/auth.js';
+import productRoutes from './routes/products.js';
+import orderRoutes from './routes/order.js';
+import uploadRoutes from './routes/upload.js';
+import categoryRoutes from './routes/categories.js';
+import adminCategoryRoutes from './routes/admin/categories.js';
+
+// Usar rutas
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/admin/categories', adminCategoryRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/user', adminRoutes);
+
+// Ruta raíz de la API
+app.get('/api', (req, res) => {
+  res.json({
+    message: '🏛️ ATHENA BRAND API',
+    tagline: 'MENOS RUIDO MAS ESENCIA',
+    version: '1.0.0',
+    status: 'online'
+  });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Ruta ${req.originalUrl} no encontrada`
+  });
 });
 
 // ========================================
