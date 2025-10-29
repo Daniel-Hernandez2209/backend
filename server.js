@@ -17,7 +17,7 @@ dotenv.config();
 
 
 const app = express();
-
+app.set('trust proxy', true); // Necesario para Vercel
 // ===========================================
 // ⚙️ MIDDLEWARE DE SEGURIDAD Y OPTIMIZACIÓN
 // ===========================================
@@ -36,7 +36,7 @@ app.use(helmet({
 }));
 
 app.use(compression());
-app.set('trust proxy', true); // Necesario para Vercel
+
 
 // Sanitización de datos
 app.use(mongoSanitize()); // Prevenir inyección NoSQL
@@ -59,6 +59,7 @@ const globalLimiter = rateLimit({
   message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => req.ip || req.headers['x-real-ip'] || 'unknown'
 });
 app.use('/api', globalLimiter);
 
