@@ -17,7 +17,7 @@ dotenv.config();
 
 
 const app = express();
-app.set('trust proxy', true); // Necesario para Vercel
+app.set('trust proxy', 1); // Necesario para Vercel
 // ===========================================
 // ⚙️ MIDDLEWARE DE SEGURIDAD Y OPTIMIZACIÓN
 // ===========================================
@@ -59,7 +59,6 @@ const globalLimiter = rateLimit({
   message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || req.headers['x-real-ip'] || 'unknown'
 });
 app.use('/api', globalLimiter);
 

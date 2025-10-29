@@ -21,7 +21,6 @@ const publicReadLimiter = rateLimit({
     // Ejemplo: no aplicar rate limit a IPs internas
     return req.ip === '127.0.0.1';
   },
-  keyGenerator: (req) => req.ip || req.headers['x-real-ip'] || 'unknown'
 });
 
 // Para endpoints que consumen más recursos (búsquedas, stats)
@@ -34,7 +33,6 @@ const heavyReadLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || req.headers['x-real-ip'] || 'unknown'
 });
 
 // Para rutas administrativas (escritura)
@@ -64,7 +62,6 @@ const criticalAdminLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.user?.id || req.ip
 });
 
 // Rate limiter específico para SEO/bots (más permisivo)
@@ -77,7 +74,6 @@ const seoLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || req.headers['x-real-ip'] || 'unknown',
   skip: (req) => {
     // Permitir bots conocidos sin límite estricto
     const userAgent = req.get('user-agent') || '';
