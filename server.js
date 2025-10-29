@@ -36,7 +36,7 @@ app.use(helmet({
 }));
 
 app.use(compression());
-app.set('trust proxy', 1); // Necesario para Vercel
+app.set('trust proxy', true); // Necesario para Vercel
 
 // Sanitización de datos
 app.use(mongoSanitize()); // Prevenir inyección NoSQL
