@@ -113,3 +113,13 @@ export default  {
   criticalAdminLimiter,
   seoLimiter
 };
+
+export  {
+  publicReadLimiter,
+  authLimiter,
+  globalLimiter,
+  heavyReadLimiter,
+  adminWriteLimiter,
+  criticalAdminLimiter,
+  seoLimiter
+};
