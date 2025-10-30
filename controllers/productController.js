@@ -606,6 +606,227 @@ class ProductController {
       });
     }
   }
+  // Agregar antes de cerrar la clase ProductController (antes del último })
+
+// -----------------------------
+// GET /api/products/admin/analytics/stats - Solo admin
+// -----------------------------
+static async getProductStats(req, res) {
+  try {
+    const [
+      totalProducts,
+      activeProducts,
+      totalValue,
+      lowStock,
+      byCategory
+    ] = await Promise.all([
+      Product.countDocuments(),
+      Product.countDocuments({ isActive: true }),
+      Product.aggregate([
+        { $match: { isActive: true } },
+        {
+          $group: {
+            _id: null,
+            total: {
+              $sum: {
+                $multiply: [
+                  { $ifNull: ['$discountPrice', '$price'] },
+                  { $sum: '$sizes.stock' }
+                ]
+              }
+            }
+          }
+        }
+      ]),
+      Product.countDocuments({
+        isActive: true,
+        'sizes.stock': { $lt: 5, $gt: 0 }
+      }),
+      Product.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: '$category', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    res.json({
+      success: true,
+      stats: {
+        totalProducts,
+        activeProducts,
+        inactiveProducts: totalProducts - activeProducts,
+        totalInventoryValue: totalValue[0]?.total || 0,
+        lowStockProducts: lowStock,
+        byCategory: byCategory.reduce((acc, cat) => {
+          acc[cat._id] = cat.count;
+          return acc;
+        }, {})
+      }
+    });
+  } catch (error) {
+    logger.error('Error en getProductStats', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener estadísticas',
+      errorCode: 'STATS_ERROR'
+    });
+  }
+}
+
+// -----------------------------
+// GET /api/products/admin/export - Solo admin
+// -----------------------------
+static async exportProducts(req, res) {
+  try {
+    const products = await Product.find({})
+      .select('-__v')
+      .lean();
+
+    // Formato CSV simple
+    const csvHeader = 'ID,Nombre,SKU,Categoría,Precio,Precio Descuento,Stock Total,Estado\n';
+    const csvRows = products.map(p => {
+      const totalStock = p.sizes?.reduce((sum, s) => sum + (s.stock || 0), 0) || 0;
+      return [
+        p._id,
+        `"${p.name || ''}"`,
+        p.sku || '',
+        p.category || '',
+        p.price || 0,
+        p.discountPrice || '',
+        totalStock,
+        p.isActive ? 'Activo' : 'Inactivo'
+      ].join(',');
+    }).join('\n');
+
+    const csv = csvHeader + csvRows;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=productos-${Date.now()}.csv`);
+    res.send(csv);
+
+    logger.info('Productos exportados', { userId: req.user?.id, count: products.length });
+  } catch (error) {
+    logger.error('Error en exportProducts', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Error al exportar productos',
+      errorCode: 'EXPORT_ERROR'
+    });
+  }
+}
+
+// -----------------------------
+// POST /api/products/batch - Operaciones en lote (solo admin)
+// -----------------------------
+static async batchOperations(req, res) {
+  try {
+    const { operation, productIds, data } = req.body;
+
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe proporcionar un array válido de IDs de productos'
+      });
+    }
+
+    // Validar que todos sean ObjectIds válidos
+    const validIds = productIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length !== productIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Algunos IDs de productos no son válidos'
+      });
+    }
+
+    let result;
+
+    switch (operation) {
+      case 'delete':
+        // Soft delete en lote
+        result = await Product.updateMany(
+          { _id: { $in: validIds } },
+          { $set: { isActive: false } }
+        );
+        break;
+
+      case 'update':
+        // Actualizar campos en lote
+        if (!data || typeof data !== 'object') {
+          return res.status(400).json({
+            success: false,
+            message: 'Debe proporcionar datos para actualizar'
+          });
+        }
+        
+        // Solo permitir actualizar ciertos campos de forma segura
+        const allowedFields = ['isFeatured', 'isActive', 'category'];
+        const updateFields = {};
+        
+        Object.keys(data).forEach(key => {
+          if (allowedFields.includes(key)) {
+            updateFields[key] = data[key];
+          }
+        });
+
+        if (Object.keys(updateFields).length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'No hay campos válidos para actualizar'
+          });
+        }
+
+        result = await Product.updateMany(
+          { _id: { $in: validIds } },
+          { $set: updateFields }
+        );
+        break;
+
+      case 'updateStock':
+        // Actualizar stock en lote requiere más lógica específica
+        return res.status(400).json({
+          success: false,
+          message: 'Actualización de stock en lote no implementada. Use la ruta individual.'
+        });
+
+      default:
+        return res.status(400).json({
+          success: false,
+          message: 'Operación no válida'
+        });
+    }
+
+    logger.info('Operación en lote ejecutada', {
+      userId: req.user?.id,
+      operation,
+      productsAffected: result.modifiedCount
+    });
+
+    res.json({
+      success: true,
+      message: `Operación ${operation} completada exitosamente`,
+      affected: result.modifiedCount
+    });
+  } catch (error) {
+    logger.error('Error en batchOperations', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+      operation: req.body.operation
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Error en operación en lote',
+      errorCode: 'BATCH_OPERATION_ERROR'
+    });
+  }
+}
 }
 
 export default  ProductController;
