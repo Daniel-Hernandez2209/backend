@@ -5,7 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import streamifier from 'streamifier';
 import { auth, adminAuth } from '../middleware/auth.js';
 import logger from '../utils/logger.js';
-import { validateImage } from '../middleware/validateImage.js';
+import  validateImage  from '../middleware/validateImage.js';
 
 
 const router = express.Router();
