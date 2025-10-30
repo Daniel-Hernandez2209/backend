@@ -3,8 +3,12 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import validator from "validator";
 import crypto from "crypto";
-import DOMPurify from "isomorphic-dompurify";
 
+// Función helper para sanitizar texto (remover HTML)
+const sanitizeText = (text) => {
+  if (!text) return text;
+  return String(text).replace(/<[^>]*>/g, '').trim();
+};
 
 // ✅ Validador reutilizable para nombres
 const nameValidator = (name) => /^[a-zA-ZÀ-ÿ\s\-']+$/u.test(name);
@@ -13,23 +17,23 @@ const userSchema = new mongoose.Schema({
   // 🧍 Datos personales
   firstName: {
     type: String,
-    importd: [true, 'El nombre es requerido'],
+    required: [true, 'El nombre es requerido'],
     trim: true,
     maxlength: [50, 'El nombre no puede exceder 50 caracteres'],
     validate: [nameValidator, 'El nombre contiene caracteres no válidos'],
-    set: (v) => DOMPurify.sanitize(v, { ALLOWED_TAGS: [] })
+    set: (v) => sanitizeText(v)
   },
   lastName: {
     type: String,
-    importd: [true, 'El apellido es requerido'],
+    required: [true, 'El apellido es requerido'],
     trim: true,
     maxlength: [50, 'El apellido no puede exceder 50 caracteres'],
     validate: [nameValidator, 'El apellido contiene caracteres no válidos'],
-    set: (v) => DOMPurify.sanitize(v, { ALLOWED_TAGS: [] })
+    set: (v) => sanitizeText(v)
   },
   email: {
     type: String,
-    importd: [true, 'El email es requerido'],
+    required: [true, 'El email es requerido'],
     unique: true,
     trim: true,
     lowercase: true,
@@ -40,7 +44,7 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    importd: [true, 'La contraseña es requerida'],
+    required: [true, 'La contraseña es requerida'],
     minlength: [8, 'La contraseña debe tener al menos 8 caracteres'],
     validate: {
       validator: (pwd) =>
@@ -62,7 +66,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [200, 'La dirección no puede exceder 200 caracteres'],
-    set: (v) => DOMPurify.sanitize(v, { ALLOWED_TAGS: [] })
+    set: (v) => sanitizeText(v)
   },
 
   // 🛡️ Seguridad y estado
@@ -203,7 +207,7 @@ userSchema.methods.toSafeJSON = function () {
   delete user.lockUntil;
   // Limpieza adicional por seguridad XSS
   ['firstName', 'lastName', 'address'].forEach((key) => {
-    if (user[key]) user[key] = DOMPurify.sanitize(user[key]);
+    if (user[key]) user[key] = sanitizeText(user[key]);
   });
   return user;
 };
@@ -217,4 +221,4 @@ userSchema.statics.findByEmail = function (email, includePassword = false) {
 };
 
 const User = mongoose.model('User', userSchema);
-export  default User;
+export default User;

@@ -1,7 +1,7 @@
 // models/Order.js - Modelo de pedidos para ATHENA BRAND (SEGURA, revisado)
 import mongoose from "mongoose";
 import validator from "validator";
-import DOMPurify from "isomorphic-dompurify";
+import xss from 'xss';
 import crypto from "crypto";
 
 
@@ -300,7 +300,7 @@ const escapeRegex = (string) => {
 
 const sanitizeText = (text) => {
   if (!text) return '';
-  return DOMPurify.sanitize(String(text), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).trim();
+  return xss(String(text)).trim();
 };
 
 // Cifrado AES-256-GCM correcto: createCipheriv / createDecipheriv
