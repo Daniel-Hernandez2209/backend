@@ -2,7 +2,7 @@
 import { validationResult, query } from "express-validator";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
-import logger from "../config/logger.js";
+import logger from "../utils/logger.js";
 import crypto from "crypto";
 import sendEmail from "../utils/sendEmail.js";
 import mongoose from "mongoose";
