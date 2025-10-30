@@ -6,7 +6,7 @@ import sendEmail from "../utils/sendEmail.js";
 import logger from "../utils/logger.js";
 import bcrypt from "bcryptjs";       // RECOMENDADO EN LUGAR DE bcrypt
 import crypto from "crypto";
-import { redis } from "@upstash/redis";
+import { Redis } from "@upstash/redis";
 import validator from "validator";
 import xss from "xss";
 
@@ -18,7 +18,7 @@ const generateTokenPair = async (userId) => {
   });
   
   const refreshToken = crypto.randomBytes(40).toString('hex');
-  
+  const redis = Redis.fromEnv();
   // Guardar refresh token en Redis con expiración
   await redis.setex(`refresh_token:${userId}`, 604800, refreshToken); // 7 días
   //indice inverso para buscar userId por refreshToken
