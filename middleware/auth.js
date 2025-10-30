@@ -6,14 +6,6 @@ import mongoose from "mongoose";
 import rateLimit from "express-rate-limit";
 
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // máximo 100 intentos por IP
-  message: 'Demasiados intentos de autenticación'
-});
-
-
-
 // Middleware de autenticación básico
 const auth = async (req, res, next) => {
   try {
@@ -181,3 +173,4 @@ export default  {
   adminAuth,
   optionalAuth
 };
+export { auth, adminAuth, optionalAuth };
