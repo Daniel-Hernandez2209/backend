@@ -1,7 +1,7 @@
 // controllers/productController.js - Controlador de productos para ATHENA BRAND (refactorizado, seguro)
 import Product from "../models/Product.js";
 import { validationResult } from "express-validator";
-import logger from "../config/logger.js";
+import logger from "../utils/logger.js";
 import mongoose from "mongoose";
 
 // -----------------------------
