@@ -11,7 +11,7 @@ import path from 'path';
  *  - Imágenes demasiado pequeñas o grandes
  *  - Archivos manipulados o corruptos
  */
-module.exports = async function validateImage(req, res, next) {
+export default async function validateImage(req, res, next) {
   try {
     if (!req.file && !req.files) {
       return res.status(400).json({
@@ -104,4 +104,3 @@ module.exports = async function validateImage(req, res, next) {
 };
 
 
-export default  validateImage;
