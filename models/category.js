@@ -4,12 +4,12 @@ import mongoose from "mongoose";
 const subcategorySchema = new mongoose.Schema({
   name: {
     type: String,
-    importd: [true, 'El nombre de la subcategoría es requerido'],
+    required: [true, 'El nombre de la subcategoría es requerido'],
     trim: true
   },
   slug: {
     type: String,
-    importd: [true, 'El slug de la subcategoría es requerido'],
+    required: [true, 'El slug de la subcategoría es requerido'],
     trim: true,
     lowercase: true,
     match: [/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug inválido']
@@ -23,7 +23,7 @@ const subcategorySchema = new mongoose.Schema({
 const categorySchema = new mongoose.Schema({
   slug: {
     type: String,
-    importd: [true, 'El slug es requerido'],
+    required: [true, 'El slug es requerido'],
     unique: true,
     trim: true,
     lowercase: true,
@@ -33,13 +33,13 @@ const categorySchema = new mongoose.Schema({
   },
   name: {
     type: String,
-    importd: [true, 'El nombre es requerido'],
+    required: [true, 'El nombre es requerido'],
     trim: true,
     maxlength: [100, 'El nombre no puede exceder 100 caracteres']
   },
   description: {
     type: String,
-    importd: [true, 'La descripción es requerida'],
+    required: [true, 'La descripción es requerida'],
     trim: true,
     maxlength: [500, 'La descripción no puede exceder 500 caracteres']
   },

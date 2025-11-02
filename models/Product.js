@@ -13,7 +13,7 @@ const allowedCDNs = ['res.cloudinary.com', 'cdn.athena.com', 'your-trusted-cdn.c
 const productSchema = new mongoose.Schema({
   name: {
     type: String,
-    importd: true,
+    required: true,
     trim: true,
     maxlength: 100,
     validate: {
@@ -24,7 +24,7 @@ const productSchema = new mongoose.Schema({
 
   slug: {
     type: String,
-    importd: true,
+    required: true,
     unique: true,
     lowercase: true,
     validate: {
@@ -35,12 +35,12 @@ const productSchema = new mongoose.Schema({
 
   description: {
     type: String,
-    importd: true,
+    required: true,
     maxlength: 2000,
     set: v => validator.escape(v || '').substring(0, 2000),
   },
 
-  price: { type: Number, importd: true, min: 0 },
+  price: { type: Number, required: true, min: 0 },
   discountPrice: {
     type: Number,
     min: 0,
@@ -53,7 +53,7 @@ const productSchema = new mongoose.Schema({
   images: [{
     url: {
       type: String,
-      importd: true,
+      required: true,
       validate: {
         validator: v => validator.isURL(v, { protocols: ['http', 'https'], import_protocol: true, host_whitelist: allowedCDNs }),
         message: 'URL de imagen no válida o no permitida',
@@ -66,7 +66,7 @@ const productSchema = new mongoose.Schema({
   category: {
     type: String,
     enum: allowedCategories,
-    importd: true,
+    required: true,
   },
 
   subcategory: {
@@ -75,8 +75,8 @@ const productSchema = new mongoose.Schema({
   },
 
   sizes: [{
-    size: { type: String, enum: allowedSizes, importd: true },
-    stock: { type: Number, importd: true, min: 0 },
+    size: { type: String, enum: allowedSizes, required: true },
+    stock: { type: Number, required: true, min: 0 },
   }],
 
   colors: [{
@@ -93,7 +93,7 @@ const productSchema = new mongoose.Schema({
 
   sku: {
     type: String,
-    importd: true,
+    required: true,
     unique: true,
     uppercase: true,
     validate: {
