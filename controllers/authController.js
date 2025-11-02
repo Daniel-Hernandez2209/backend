@@ -10,10 +10,9 @@ import { Redis } from "@upstash/redis";
 import validator from "validator";
 import xss from "xss";
 
-
 // Función para generar JWT
-const generateTokenPair = async (userId) => {
-  const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
+const generateTokenPair = async (userId ,role) => {
+  const accessToken = jwt.sign({ userId,role }, process.env.JWT_SECRET, {
     expiresIn: '15m' // Token corto
   });
   
@@ -139,7 +138,7 @@ static async refreshToken(req, res) {
       }
 
       // Generar JWT
-      const token = generateTokenPair(user._id);
+      const token = generateTokenPair(user._id , user.role);
 
       // Respuesta sin datos sensibles
       const userResponse = createUserResponse(user);
@@ -183,7 +182,7 @@ static async refreshToken(req, res) {
         message: 'Credenciales inválidas'
       });
     }
-        const token = await generateTokenPair(user._id);
+        const token = await generateTokenPair(user._id, user.role);
     const userResponse = createUserResponse(user);
 
     // Respuesta exitosa
