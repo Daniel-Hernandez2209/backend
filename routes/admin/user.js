@@ -31,7 +31,7 @@ router.get('/users',
   // auth se ejecuta primero, luego adminAuth
   // Solo llegas aquí si ambos pasan
 );
-// En tu archivo de rutas (ej: routes/auth.js o server.js)
+
 
 
 // GET /api/admin/users/:id - Obtener un usuario

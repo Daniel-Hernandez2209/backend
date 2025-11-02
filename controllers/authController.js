@@ -9,7 +9,8 @@ import crypto from "crypto";
 import { Redis } from "@upstash/redis";
 import validator from "validator";
 import xss from "xss";
-
+  const redis = Redis.fromEnv();
+  
 // Función para generar JWT
 const generateTokenPair = async (userId ,role) => {
   const accessToken = jwt.sign({ userId,role }, process.env.JWT_SECRET, {
@@ -17,7 +18,6 @@ const generateTokenPair = async (userId ,role) => {
   });
   
   const refreshToken = crypto.randomBytes(40).toString('hex');
-  const redis = Redis.fromEnv();
   // Guardar refresh token en Redis con expiración
   await redis.setex(`refresh_token:${userId}`, 604800, refreshToken); // 7 días
   //indice inverso para buscar userId por refreshToken
