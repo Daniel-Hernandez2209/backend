@@ -1,7 +1,7 @@
 // routes/admin/categories.js - Rutas administrativas
 import express from 'express';
 import CategoryController from '../../controllers/categoryController.js';
-import { adminAuth } from '../../middleware/auth.js';
+import { adminAuth,auth } from '../../middleware/auth.js';
 import { adminWriteLimiter, criticalAdminLimiter } from '../../middleware/rateLimiter.js';
 
 const router = express.Router();
@@ -9,7 +9,7 @@ const router = express.Router();
 
 
 // Aplicar adminAuth a todas las rutas de este router
-router.use(adminAuth);
+router.use(auth,adminAuth);
 
 // Rutas admin (ya protegidas por el middleware arriba)
 router.get('/', adminWriteLimiter, CategoryController.getAllCategoriesAdmin);

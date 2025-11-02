@@ -101,6 +101,8 @@ const auth = async (req, res, next) => {
 // Middleware para verificar si es admin
 const adminAuth = async (req, res, next) => {
   try {
+
+    
     // Primero ejecutar auth básico
   if (!req.user) {
       return res.status(401).json({
