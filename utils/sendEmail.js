@@ -1,29 +1,36 @@
 // utils/sendEmail.js - Utilidad para envío de emails
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
 
 // Configuración del transporter
 const createTransporter = () => {
+  // ✅ VALIDATE required environment variables
+  const requiredVars = ["EMAIL_HOST", "EMAIL_PORT", "EMAIL_USER", "EMAIL_PASS"];
+  const missing = requiredVars.filter((v) => !process.env[v]);
+  if (missing.length > 0) {
+    throw new Error(`Missing email configuration: ${missing.join(", ")}`);
+  }
+
   // Configuración para Gmail (cambiar según tu proveedor)
   return nodemailer.createTransporter({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false, // true para 465, false para otros puertos
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT),
+    secure: process.env.EMAIL_SECURE === "true",
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS // App password para Gmail
+      pass: process.env.EMAIL_PASS,
     },
     tls: {
-      rejectUnauthorized: false
-    }
+      rejectUnauthorized: process.env.EMAIL_REJECT_UNAUTHORIZED !== "false",
+    },
   });
 };
 
 // Templates de email
 const getEmailTemplate = (template, data) => {
   switch (template) {
-    case 'verification':
+    case "verification":
       return {
-        subject: 'Verificar cuenta - ATHENA BRAND',
+        subject: "Verificar cuenta - ATHENA BRAND",
         html: `
           <div style="font-family: 'Arial', sans-serif; max-width: 600px; margin: 0 auto; background: #F5F2EF;">
             <div style="background: #CEBCA6; padding: 20px; text-align: center;">
@@ -65,12 +72,12 @@ const getEmailTemplate = (template, data) => {
               </p>
             </div>
           </div>
-        `
+        `,
       };
 
-    case 'password-reset':
+    case "password-reset":
       return {
-        subject: 'Resetear contraseña - ATHENA BRAND',
+        subject: "Resetear contraseña - ATHENA BRAND",
         html: `
           <div style="font-family: 'Arial', sans-serif; max-width: 600px; margin: 0 auto; background: #F5F2EF;">
             <div style="background: #CEBCA6; padding: 20px; text-align: center;">
@@ -112,21 +119,25 @@ const getEmailTemplate = (template, data) => {
               </p>
             </div>
           </div>
-        `
+        `,
       };
 
-    case 'order-confirmation':
-      const itemsHtml = data.items.map(item => `
+    case "order-confirmation":
+      const itemsHtml = data.items
+        .map(
+          (item) => `
         <tr>
           <td style="padding: 10px; border-bottom: 1px solid #eee;">
             <strong>${item.productSnapshot.name}</strong><br>
             <small style="color: #666;">Talla: ${item.size} | Cantidad: ${item.quantity}</small>
           </td>
           <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">
-            $${item.subtotal.toLocaleString('es-CO')}
+            $${item.subtotal.toLocaleString("es-CO")}
           </td>
         </tr>
-      `).join('');
+      `,
+        )
+        .join("");
 
       return {
         subject: `Pedido confirmado #${data.order.orderNumber} - ATHENA BRAND`,
@@ -155,7 +166,7 @@ const getEmailTemplate = (template, data) => {
                   ${itemsHtml}
                   <tr style="font-weight: bold; background: #F5F2EF;">
                     <td style="padding: 15px;">Total:</td>
-                    <td style="padding: 15px; text-align: right;">$${data.order.pricing.total.toLocaleString('es-CO')}</td>
+                    <td style="padding: 15px; text-align: right;">$${data.order.pricing.total.toLocaleString("es-CO")}</td>
                   </tr>
                 </table>
               </div>
@@ -184,10 +195,10 @@ const getEmailTemplate = (template, data) => {
               </p>
             </div>
           </div>
-        `
+        `,
       };
 
-    case 'order-status-update':
+    case "order-status-update":
       return {
         subject: `Actualización de pedido #${data.orderNumber} - ATHENA BRAND`,
         html: `
@@ -213,13 +224,17 @@ const getEmailTemplate = (template, data) => {
                 </span>
               </div>
               
-              ${data.trackingNumber ? `
+              ${
+                data.trackingNumber
+                  ? `
                 <div style="margin: 25px 0;">
                   <p style="color: #666; margin-bottom: 10px;">
                     <strong>Número de seguimiento:</strong> ${data.trackingNumber}
                   </p>
                 </div>
-              ` : ''}
+              `
+                  : ""
+              }
               
               <div style="text-align: center; margin: 30px 0;">
                 <a href="${data.trackingUrl}" 
@@ -231,7 +246,7 @@ const getEmailTemplate = (template, data) => {
               </div>
             </div>
           </div>
-        `
+        `,
       };
 
     default:
@@ -243,69 +258,68 @@ const getEmailTemplate = (template, data) => {
 const sendEmail = async ({ to, subject, template, data, html, text }) => {
   try {
     const transporter = createTransporter();
-    
+
     let emailContent = {};
-    
+
     if (template && data) {
       // Usar template predefinido
       const templateContent = getEmailTemplate(template, data);
       emailContent = {
         subject: templateContent.subject,
-        html: templateContent.html
+        html: templateContent.html,
       };
     } else {
       // Usar contenido personalizado
       emailContent = {
         subject,
         html: html || text,
-        text
+        text,
       };
     }
-    
+
     const mailOptions = {
       from: {
-        name: 'ATHENA BRAND',
-        address: process.env.EMAIL_FROM || process.env.EMAIL_USER
+        name: "ATHENA BRAND",
+        address: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       },
       to,
       ...emailContent,
       // Headers adicionales
       headers: {
-        'X-Mailer': 'ATHENA BRAND API',
-        'X-Priority': '3'
-      }
+        "X-Mailer": "ATHENA BRAND API",
+        "X-Priority": "3",
+      },
     };
-    
+
     const result = await transporter.sendMail(mailOptions);
-    
-    console.log('✅ Email enviado exitosamente:', {
+
+    console.log("✅ Email enviado exitosamente:", {
       to,
       subject: emailContent.subject,
-      messageId: result.messageId
+      messageId: result.messageId,
     });
-    
+
     return {
       success: true,
-      messageId: result.messageId
+      messageId: result.messageId,
     };
-    
   } catch (error) {
-    console.error('❌ Error enviando email:', error);
-    
+    console.error("❌ Error enviando email:", error);
+
     throw new Error(`Error enviando email: ${error.message}`);
   }
 };
 
 // Función para validar configuración de email
 const validateEmailConfig = () => {
-  const importdVars = ['EMAIL_HOST', 'EMAIL_USER', 'EMAIL_PASS'];
-  const missing = importdVars.filter(varName => !process.env[varName]);
-  
+  const importdVars = ["EMAIL_HOST", "EMAIL_USER", "EMAIL_PASS"];
+  const missing = importdVars.filter((varName) => !process.env[varName]);
+
   if (missing.length > 0) {
-    console.warn('⚠️ Variables de email faltantes:', missing);
+    console.warn("⚠️ Variables de email faltantes:", missing);
     return false;
   }
-  
+
   return true;
 };
 
@@ -313,12 +327,12 @@ const validateEmailConfig = () => {
 const sendWelcomeEmail = async (user) => {
   return sendEmail({
     to: user.email,
-    template: 'verification',
+    template: "verification",
     data: {
       firstName: user.firstName,
       verificationToken: user.verificationToken,
-      verificationUrl: `${process.env.FRONTEND_URL}/verificar-cuenta?token=${user.verificationToken}`
-    }
+      verificationUrl: `${process.env.FRONTEND_URL}/verificar-cuenta?token=${user.verificationToken}`,
+    },
   });
 };
 
@@ -326,5 +340,5 @@ export default {
   sendEmail,
   validateEmailConfig,
   sendWelcomeEmail,
-  getEmailTemplate
+  getEmailTemplate,
 };

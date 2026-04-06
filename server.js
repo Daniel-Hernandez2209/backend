@@ -9,60 +9,79 @@ import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
 import xss from "xss-clean";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
+import { csrfProtection, csrfErrorHandler } from "./middleware/csrf.js";
 import logger from "./utils/logger.js";
-import connectDB from "./db.js";  
-import {globalLimiter,authLimiter} from "./middleware/rateLimiter.js";
+import connectDB from "./db.js";
+import { globalLimiter, authLimiter } from "./middleware/rateLimiter.js";
 dotenv.config();
 
-
-
 const app = express();
-app.set('trust proxy', 1); // Necesario para Vercel
+app.set("trust proxy", 1); // Necesario para Vercel
+
+// ✅ HTTPS Enforcement - Redirect HTTP to HTTPS in production
+if (process.env.NODE_ENV === "production") {
+  app.use((req, res, next) => {
+    if (req.header("x-forwarded-proto") !== "https") {
+      res.redirect(`https://${req.header("host")}${req.url}`);
+    } else {
+      next();
+    }
+  });
+}
+
 // ===========================================
 // ⚙️ MIDDLEWARE DE SEGURIDAD Y OPTIMIZACIÓN
 // ===========================================
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
     },
-  },
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
-}));
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  }),
+);
 
 app.use(compression());
-
 
 // Sanitización de datos
 app.use(mongoSanitize()); // Prevenir inyección NoSQL
 app.use(xss()); // Prevenir ataques XSS
 
 // Logging según entorno
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
+if (process.env.NODE_ENV === "development") {
+  app.use(morgan("dev"));
 } else {
-  app.use(morgan('combined'));
+  app.use(morgan("combined"));
 }
 
 // ===========================================
 // 🚦 RATE LIMITING GLOBAL Y ESPECÍFICO
 // ===========================================
 
-app.use('/api', globalLimiter);
+app.use("/api", globalLimiter);
 
-app.use('/api/auth/login', authLimiter);
+app.use("/api/auth/login", authLimiter);
 
 // Limiter adicional para área administrativa
-app.use('/api/admin', rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { success: false, message: 'Demasiadas solicitudes al área administrativa.' },
-}));
+app.use(
+  "/api/admin",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: {
+      success: false,
+      message: "Demasiadas solicitudes al área administrativa.",
+    },
+  }),
+);
 
 // ===========================================
 // 🌐 CONFIGURACIÓN DE CORS SEGURA
@@ -71,24 +90,24 @@ app.use('/api/admin', rateLimit({
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      'https://athenabrand.co',
-      'https://www.athenabrand.co'
+      "https://athenabrand.co",
+      "https://www.athenabrand.co",
     ];
 
-    if (process.env.NODE_ENV === 'development') {
-      allowedOrigins.push('http://localhost:4200', 'http://localhost:3000');
+    if (process.env.NODE_ENV === "development") {
+      allowedOrigins.push("http://localhost:4200", "http://localhost:3000");
     }
 
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('No permitido por CORS'));
+      callback(new Error("No permitido por CORS"));
     }
   },
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 };
 
 app.use(cors(corsOptions));
@@ -97,30 +116,39 @@ app.use(cors(corsOptions));
 // 🧩 PARSEO DE JSON SEGURO
 // ===========================================
 
-app.use(express.json({
-  limit: '1mb',
-  verify: (req, res, buf) => {
-    try {
-      JSON.parse(buf);
-      req.rawBody = buf;
-    } catch {
-      const err = new Error('JSON inválido');
-      err.status = 400;
-      throw err;
-    }
-  }
-}));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, res, buf) => {
+      try {
+        JSON.parse(buf);
+        req.rawBody = buf;
+      } catch {
+        const err = new Error("JSON inválido");
+        err.status = 400;
+        throw err;
+      }
+    },
+  }),
+);
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
+// ✅ CSRF Protection Setup
+app.use(cookieParser());
+app.use(csrfProtection);
 
 // ===========================================
 // 🗂️ ARCHIVOS ESTÁTICOS
 // ===========================================
 
-app.use('/uploads', express.static('uploads', {
-  maxAge: '1y',
-  etag: true,
-  lastModified: true
-}));
+app.use(
+  "/uploads",
+  express.static("uploads", {
+    maxAge: "1y",
+    etag: true,
+    lastModified: true,
+  }),
+);
 
 // ===========================================
 // 🧠 CONEXIÓN A MONGODB (PERSISTENTE EN VERCEL)
@@ -129,9 +157,9 @@ app.use('/uploads', express.static('uploads', {
 (async () => {
   try {
     await connectDB();
-    console.log('✅ Conectado a MongoDB al iniciar el servidor');
+    console.log("✅ Conectado a MongoDB al iniciar el servidor");
   } catch (error) {
-    console.error('❌ Error al conectar la base de datos:', error.message);
+    console.error("❌ Error al conectar la base de datos:", error.message);
   }
 })();
 
@@ -139,56 +167,69 @@ app.use('/uploads', express.static('uploads', {
 // 🚀 RUTAS DE LA API
 // ===========================================
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get("/health", (req, res) => {
+  const isConnected = mongoose.connection.readyState === 1;
+  const status = isConnected ? 200 : 503;
+  res.status(status).json({
+    status: isConnected ? "OK" : "unhealthy",
+    db: isConnected ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/readiness", (req, res) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ ready: false });
+  }
+  res.json({ ready: true });
 });
 
 // Importar rutas
-import adminRoutes from './routes/admin/user.js';
-import authRoutes from './routes/auth.js';
-import productRoutes from './routes/products.js';
-import orderRoutes from './routes/order.js';
-import uploadRoutes from './routes/upload.js';
-import categoryRoutes from './routes/categories.js';
-import adminCategoryRoutes from './routes/admin/categories.js';
+import adminRoutes from "./routes/admin/user.js";
+import authRoutes from "./routes/auth.js";
+import productRoutes from "./routes/products.js";
+import orderRoutes from "./routes/order.js";
+import uploadRoutes from "./routes/upload.js";
+import categoryRoutes from "./routes/categories.js";
+import adminCategoryRoutes from "./routes/admin/categories.js";
 // Usar rutas
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/upload', uploadRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/admin/categories', adminCategoryRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/admin/user', adminRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/upload", uploadRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/admin/categories", adminCategoryRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/admin/user", adminRoutes);
 
 // ===========================================
 // 📘 INFORMACIÓN Y DOCUMENTACIÓN DE LA API
 // ===========================================
 
-app.get('/api', (req, res) => {
+app.get("/api", (req, res) => {
   res.json({
-    message: '🏛️ ATHENA BRAND API',
-    tagline: 'MENOS RUIDO MAS ESENCIA',
-    version: '1.0.0',
-    documentation: '/api/docs',
+    message: "🏛️ ATHENA BRAND API",
+    tagline: "MENOS RUIDO MAS ESENCIA",
+    version: "1.0.0",
+    documentation: "/api/docs",
     features: [
-      'Autenticación JWT',
-      'Gestión de productos',
-      'Sistema de pedidos',
-      'Uploads de imágenes',
-      'Emails transaccionales',
-      'Panel administrativo'
+      "Autenticación JWT",
+      "Gestión de productos",
+      "Sistema de pedidos",
+      "Uploads de imágenes",
+      "Emails transaccionales",
+      "Panel administrativo",
     ],
   });
 });
 
-app.get('/api/docs', (req, res) => {
+app.get("/api/docs", (req, res) => {
   res.json({
-    title: 'ATHENA BRAND API Documentation',
-    version: '1.0.0',
-    description: 'API REST para la tienda ATHENA BRAND',
-    baseURL: req.protocol + '://' + req.get('host') + '/api',
-    authentication: 'Bearer Token (JWT)',
+    title: "ATHENA BRAND API Documentation",
+    version: "1.0.0",
+    description: "API REST para la tienda ATHENA BRAND",
+    baseURL: req.protocol + "://" + req.get("host") + "/api",
+    authentication: "Bearer Token (JWT)",
   });
 });
 
@@ -198,16 +239,22 @@ app.get('/api/docs', (req, res) => {
 
 const TestSchema = new mongoose.Schema({
   name: String,
-  timestamp: { type: Date, default: Date.now }
+  timestamp: { type: Date, default: Date.now },
 });
 const TestModel = mongoose.models.Test || mongoose.model("Test", TestSchema);
 
 app.get("/api/test-db", async (req, res) => {
   try {
     const doc = await TestModel.create({ name: "Test Connection" });
-    res.json({ success: true, message: "✅ Conexión exitosa a MongoDB", timestamp: doc.timestamp });
+    res.json({
+      success: true,
+      message: "✅ Conexión exitosa a MongoDB",
+      timestamp: doc.timestamp,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error interno del servidor" });
+    res
+      .status(500)
+      .json({ success: false, message: "Error interno del servidor" });
   }
 });
 
@@ -215,32 +262,35 @@ app.get("/api/test-db", async (req, res) => {
 // ⚠️ MANEJO GLOBAL DE ERRORES
 // ===========================================
 
+// ✅ CSRF Error Handler (must be before other error handlers)
+app.use(csrfErrorHandler);
+
 app.use((err, req, res, next) => {
-  if (err.message === 'No permitido por CORS') {
+  if (err.message === "No permitido por CORS") {
     return res.status(403).json({ success: false, message: err.message });
   }
 
   logger.error(err, req);
-  console.error('❌ Error:', err);
+  console.error("❌ Error:", err);
 
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Error interno del servidor'
+    message: err.message || "Error interno del servidor",
   });
 });
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use("*", (req, res) => {
   const response = {
     success: false,
-    message: `Ruta ${req.originalUrl} no encontrada`
+    message: `Ruta ${req.originalUrl} no encontrada`,
   };
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === "development") {
     response.availableEndpoints = [
-      'GET /api',
-      'GET /api/docs',
-      'GET /health',
-      'GET /api/test-db'
+      "GET /api",
+      "GET /api/docs",
+      "GET /health",
+      "GET /api/test-db",
     ];
   }
   res.status(404).json(response);

@@ -4,24 +4,28 @@ import { validationResult } from "express-validator";
 import User from "../models/User.js";
 import sendEmail from "../utils/sendEmail.js";
 import logger from "../utils/logger.js";
-import bcrypt from "bcryptjs";       // RECOMENDADO EN LUGAR DE bcrypt
+import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { Redis } from "@upstash/redis";
 import validator from "validator";
 import xss from "xss";
-  const redis = Redis.fromEnv();
-  
+import {
+  storeRefreshToken,
+  invalidateUserRefreshTokens,
+} from "../utils/redis.js";
+
+const redis = Redis.fromEnv();
+
 // Función para generar JWT
-const generateTokenPair = async (userId ,role) => {
-  const accessToken = jwt.sign({ userId,role }, process.env.JWT_SECRET, {
-    expiresIn: '15m' // Token corto
+const generateTokenPair = async (userId, role) => {
+  const accessToken = jwt.sign({ userId, role }, process.env.JWT_SECRET, {
+    expiresIn: "15m",
+    algorithms: ["HS256"],
   });
-  
-  const refreshToken = crypto.randomBytes(40).toString('hex');
-  // Guardar refresh token en Redis con expiración
-  await redis.setex(`refresh_token:${userId}`, 604800, refreshToken); // 7 días
-  //indice inverso para buscar userId por refreshToken
-  await redis.setex(`rt:${refreshToken}`, 604800, userId); // 7 días
+
+  const refreshToken = crypto.randomBytes(40).toString("hex");
+  // ✅ Use centralized Redis utility
+  await storeRefreshToken(userId.toString(), refreshToken, 604800);
 
   return { accessToken, refreshToken };
 };
@@ -39,47 +43,53 @@ const createUserResponse = (user) => {
 };
 
 class AuthController {
+  static async refreshToken(req, res) {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Refresh token requerido" });
+      }
 
-static async refreshToken(req, res) {
-  try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) {
-      return res.status(400).json({ success: false, message: 'Refresh token requerido' });
-    }
+      // ✅ Obtener userId directamente desde el índice inverso
+      const userId = await redis.get(`rt:${refreshToken}`);
 
-    // ✅ Obtener userId directamente desde el índice inverso
-    const userId = await redis.get(`rt:${refreshToken}`);
-    
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Refresh token inválido o expirado' });
-    }
+      if (!userId) {
+        return res
+          .status(401)
+          .json({
+            success: false,
+            message: "Refresh token inválido o expirado",
+          });
+      }
 
-    const user = await User.findById(userId);
-    if (!user || !user.isActive) {
-      // Opcional: limpiar token huérfano
+      const user = await User.findById(userId);
+      if (!user || !user.isActive) {
+        // Opcional: limpiar token huérfano
+        await redis.del(`rt:${refreshToken}`);
+        return res
+          .status(401)
+          .json({ success: false, message: "Usuario no válido" });
+      }
+
+      // Generar nuevos tokens
+      const newTokens = await generateTokenPair(user._id);
+
+      // Opcional: eliminar el refresh token antiguo (mejor seguridad)
       await redis.del(`rt:${refreshToken}`);
-      return res.status(401).json({ success: false, message: 'Usuario no válido' });
+      await redis.del(`refresh_token:${userId}`);
+
+      res.json({
+        success: true,
+        message: "Token renovado",
+        token: newTokens,
+      });
+    } catch (error) {
+      logger.error("Error en refreshToken:", error);
+      res.status(500).json({ success: false, message: "Error interno" });
     }
-
-    // Generar nuevos tokens
-    const newTokens = await generateTokenPair(user._id);
-
-    // Opcional: eliminar el refresh token antiguo (mejor seguridad)
-    await redis.del(`rt:${refreshToken}`);
-    await redis.del(`refresh_token:${userId}`);
-
-    res.json({
-      success: true,
-      message: 'Token renovado',
-      token: newTokens
-    });
-
-  } catch (error) {
-    logger.error('Error en refreshToken:', error);
-    res.status(500).json({ success: false, message: 'Error interno' });
   }
-}
-
 
   // POST /api/auth/register - Registro de usuario
   static async register(req, res) {
@@ -89,8 +99,8 @@ static async refreshToken(req, res) {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          message: 'Datos de registro inválidos',
-          errors: errors.array()
+          message: "Datos de registro inválidos",
+          errors: errors.array(),
         });
       }
 
@@ -101,7 +111,7 @@ static async refreshToken(req, res) {
       if (existingUser) {
         return res.status(400).json({
           success: false,
-          message: 'Ya existe una cuenta con este email'
+          message: "Ya existe una cuenta con este email",
         });
       }
 
@@ -112,93 +122,93 @@ static async refreshToken(req, res) {
         firstName,
         lastName,
         phone,
-        address
+        address,
       });
 
       // Generar token de verificación
       const verificationToken = user.generateVerificationToken();
-      
+
       await user.save();
 
       // Enviar email de verificación
       try {
         await sendEmail({
           to: user.email,
-          subject: 'Verificar cuenta - ATHENA BRAND',
-          template: 'verification',
+          subject: "Verificar cuenta - ATHENA BRAND",
+          template: "verification",
           data: {
             firstName: user.firstName,
             verificationToken,
-            verificationUrl: `${process.env.FRONTEND_URL}/verificar-cuenta?token=${verificationToken}`
-          }
+            verificationUrl: `${process.env.FRONTEND_URL}/verificar-cuenta?token=${verificationToken}`,
+          },
         });
       } catch (emailError) {
-        console.error('Error enviando email de verificación:', emailError);
+        console.error("Error enviando email de verificación:", emailError);
         // No fallar el registro si el email falla
       }
 
       // Generar JWT
-      const token = generateTokenPair(user._id , user.role);
+      const token = await generateTokenPair(user._id, user.role);
 
       // Respuesta sin datos sensibles
       const userResponse = createUserResponse(user);
 
       res.status(201).json({
         success: true,
-        message: 'Usuario registrado exitosamente. Revisa tu email para verificar tu cuenta.',
+        message:
+          "Usuario registrado exitosamente. Revisa tu email para verificar tu cuenta.",
         token,
-        user: userResponse
+        user: userResponse,
       });
-
     } catch (error) {
-       // Log interno sin exposición al cliente
-      logger.error('Error en registro:', {
-            error: error.message,
-            stack: error.stack,
-            userId: req.userId
-          });
-            return res.status(500).json({
-              success: false,
-              message: 'Error interno del servidor'
-            });
+      // Log interno sin exposición al cliente
+      logger.error("Error en registro:", {
+        error: error.message,
+        stack: error.stack,
+        userId: req.userId,
+      });
+      return res.status(500).json({
+        success: false,
+        message: "Error interno del servidor",
+      });
     }
   }
 
   // POST /api/auth/login - Login de usuario
   static async login(req, res) {
     try {
-    const { email, password } = req.body;
-    let user = await User.findOne({ email }).select('+password');
-    
-    // Simular hash comparison aunque el usuario no exista
-    const dummyHash = '$2b$12$dummy.hash.to.prevent.timing.attacks.abcdefghijklmnopqrstuvwxyz';
-    const passwordToCheck = user ? user.password : dummyHash;
-    
-    const isPasswordValid = await bcrypt.compare(password, passwordToCheck);
-    // Si no existe usuario o la contraseña es inválida
-    if (!user || !isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: 'Credenciales inválidas'
+      const { email, password } = req.body;
+      let user = await User.findOne({ email }).select("+password");
+
+      // Simular hash comparison aunque el usuario no exista
+      const dummyHash =
+        "$2b$12$dummy.hash.to.prevent.timing.attacks.abcdefghijklmnopqrstuvwxyz";
+      const passwordToCheck = user ? user.password : dummyHash;
+
+      const isPasswordValid = await bcrypt.compare(password, passwordToCheck);
+      // Si no existe usuario o la contraseña es inválida
+      if (!user || !isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: "Credenciales inválidas",
+        });
+      }
+      const token = await generateTokenPair(user._id, user.role);
+      const userResponse = createUserResponse(user);
+
+      // Respuesta exitosa
+      return res.json({
+        success: true,
+        message: "Inicio de sesión exitoso",
+        token,
+        user: userResponse,
       });
-    }
-        const token = await generateTokenPair(user._id, user.role);
-    const userResponse = createUserResponse(user);
-
-    // Respuesta exitosa
-    return res.json({
-      success: true,
-      message: 'Inicio de sesión exitoso',
-      token,
-      user: userResponse
-    });
-
     } catch (error) {
-      console.error('Error en login:', error);
+      console.error("Error en login:", error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor',
-        error: process.env.NODE_ENV === 'development' ? error.message : {}
+        message: "Error interno del servidor",
+        error: process.env.NODE_ENV === "development" ? error.message : {},
       });
     }
   }
@@ -207,26 +217,27 @@ static async refreshToken(req, res) {
   static async getProfile(req, res) {
     try {
       const user = await User.findById(req.userId)
-        .select('-password -loginAttempts -lockUntil -verificationToken -passwordResetToken')
-        .populate('wishlist', 'name slug images price discountPrice');
+        .select(
+          "-password -loginAttempts -lockUntil -verificationToken -passwordResetToken",
+        )
+        .populate("wishlist", "name slug images price discountPrice");
 
       if (!user) {
         return res.status(404).json({
           success: false,
-          message: 'Usuario no encontrado'
+          message: "Usuario no encontrado",
         });
       }
 
       res.json({
         success: true,
-        user
+        user,
       });
-
     } catch (error) {
-      console.error('Error obteniendo perfil:', error);
+      console.error("Error obteniendo perfil:", error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: "Error interno del servidor",
       });
     }
   }
@@ -238,49 +249,57 @@ static async refreshToken(req, res) {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          message: 'Datos inválidos',
-          errors: errors.array()
+          message: "Datos inválidos",
+          errors: errors.array(),
         });
       }
 
-      const allowedUpdates = ['firstName', 'lastName', 'phone', 'address', 'birthDate', 'gender', 'preferences'];
+      const allowedUpdates = [
+        "firstName",
+        "lastName",
+        "phone",
+        "address",
+        "birthDate",
+        "gender",
+        "preferences",
+      ];
       const updates = {};
-      
-allowedUpdates.forEach(field => {
-  if (req.body[field] !== undefined) {
-    let value = req.body[field];
-    
-    // Sanitizar strings
-    if (typeof value === 'string') {
-      value = xss(value.trim());
-      
-      // Validaciones específicas por campo
-      if (field === 'phone' && !validator.isMobilePhone(value)) {
-        throw new Error('Número de teléfono inválido');
-      }
-    }
-    
-    updates[field] = value;
-  }
-});
 
-      const user = await User.findByIdAndUpdate(
-        req.userId,
-        updates,
-        { new: true, runValidators: true }
-      ).select('-password -loginAttempts -lockUntil -verificationToken -passwordResetToken');
+      allowedUpdates.forEach((field) => {
+        if (req.body[field] !== undefined) {
+          let value = req.body[field];
+
+          // Sanitizar strings
+          if (typeof value === "string") {
+            value = xss(value.trim());
+
+            // Validaciones específicas por campo
+            if (field === "phone" && !validator.isMobilePhone(value)) {
+              throw new Error("Número de teléfono inválido");
+            }
+          }
+
+          updates[field] = value;
+        }
+      });
+
+      const user = await User.findByIdAndUpdate(req.userId, updates, {
+        new: true,
+        runValidators: true,
+      }).select(
+        "-password -loginAttempts -lockUntil -verificationToken -passwordResetToken",
+      );
 
       res.json({
         success: true,
-        message: 'Perfil actualizado exitosamente',
-        user
+        message: "Perfil actualizado exitosamente",
+        user,
       });
-
     } catch (error) {
-      console.error('Error actualizando perfil:', error);
+      console.error("Error actualizando perfil:", error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: "Error interno del servidor",
       });
     }
   }
@@ -293,39 +312,37 @@ allowedUpdates.forEach(field => {
       if (!token) {
         return res.status(400).json({
           success: false,
-          message: 'Token de verificación requerido'
+          message: "Token de verificación requerido",
         });
       }
-      
 
       const user = await User.findOne({
         verificationToken: token,
-        verificationTokenExpires: { $gt: Date.now() }
+        verificationTokenExpires: { $gt: Date.now() },
       });
 
       if (!user) {
         return res.status(400).json({
           success: false,
-          message: 'Token de verificación inválido o expirado'
+          message: "Token de verificación inválido o expirado",
         });
       }
 
       user.isVerified = true;
       user.verificationToken = undefined;
       user.verificationTokenExpires = undefined;
-      
+
       await user.save();
 
       res.json({
         success: true,
-        message: 'Email verificado exitosamente'
+        message: "Email verificado exitosamente",
       });
-
     } catch (error) {
-      console.error('Error verificando email:', error);
+      console.error("Error verificando email:", error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: "Error interno del servidor",
       });
     }
   }
@@ -337,7 +354,7 @@ allowedUpdates.forEach(field => {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          message: 'Email no válido'
+          message: "Email no válido",
         });
       }
 
@@ -348,7 +365,8 @@ allowedUpdates.forEach(field => {
         // Por seguridad, siempre responder success
         return res.json({
           success: true,
-          message: 'Si el email existe, se ha enviado un enlace de recuperación'
+          message:
+            "Si el email existe, se ha enviado un enlace de recuperación",
         });
       }
 
@@ -358,36 +376,35 @@ allowedUpdates.forEach(field => {
       try {
         await sendEmail({
           to: user.email,
-          subject: 'Resetear contraseña - ATHENA BRAND',
-          template: 'password-reset',
+          subject: "Resetear contraseña - ATHENA BRAND",
+          template: "password-reset",
           data: {
             firstName: user.firstName,
             resetToken,
-            resetUrl: `${process.env.FRONTEND_URL}/resetear-password?token=${resetToken}`
-          }
+            resetUrl: `${process.env.FRONTEND_URL}/resetear-password?token=${resetToken}`,
+          },
         });
       } catch (emailError) {
-        console.error('Error enviando email de reset:', emailError);
+        console.error("Error enviando email de reset:", emailError);
         user.passwordResetToken = undefined;
         user.passwordResetExpires = undefined;
         await user.save();
-        
+
         return res.status(500).json({
           success: false,
-          message: 'Error enviando email de recuperación'
+          message: "Error enviando email de recuperación",
         });
       }
 
       res.json({
         success: true,
-        message: 'Se ha enviado un enlace de recuperación a tu email'
+        message: "Se ha enviado un enlace de recuperación a tu email",
       });
-
     } catch (error) {
-      console.error('Error en forgot password:', error);
+      console.error("Error en forgot password:", error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: "Error interno del servidor",
       });
     }
   }
@@ -399,8 +416,8 @@ allowedUpdates.forEach(field => {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          message: 'Datos inválidos',
-          errors: errors.array()
+          message: "Datos inválidos",
+          errors: errors.array(),
         });
       }
 
@@ -408,60 +425,74 @@ allowedUpdates.forEach(field => {
 
       const user = await User.findOne({
         passwordResetToken: token,
-        passwordResetExpires: { $gt: Date.now() }
+        passwordResetExpires: { $gt: Date.now() },
       });
 
       if (!user) {
         return res.status(400).json({
           success: false,
-          message: 'Token de reset inválido o expirado'
+          message: "Token de reset inválido o expirado",
         });
       }
 
       user.password = password;
       user.passwordResetToken = undefined;
       user.passwordResetExpires = undefined;
-      
+
       await user.save();
+
+      // ✅ INVALIDATE ALL REFRESH TOKENS after password reset
+      try {
+        await invalidateUserRefreshTokens(user._id.toString());
+      } catch (error) {
+        logger.error("Error invalidating tokens on password reset", {
+          userId: user._id,
+          error: error.message,
+        });
+        // Don't fail the password reset if token invalidation fails
+      }
 
       res.json({
         success: true,
-        message: 'Contraseña restablecida exitosamente'
+        message:
+          "Contraseña restablecida exitosamente. Por favor inicia sesión nuevamente.",
       });
-
     } catch (error) {
-      console.error('Error en reset password:', error);
+      console.error("Error en reset password:", error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: "Error interno del servidor",
       });
     }
   }
 
   // POST /api/auth/logout - Logout
-   static async logout(req, res) {
-  try {
-    if (!req.userId) {
-      return res.status(400).json({ success: false, message: 'Usuario no autenticado' });
-    }
-    const userId = req.userId;
-    
-    // Obtener el refresh token actual (si lo guardaste en el login)
-    const currentRefreshToken = await redis.get(`refresh_token:${userId}`);
-    
-    if (currentRefreshToken) {
-      await redis.del(`rt:${currentRefreshToken}`);
-    }
-    
-    await redis.del(`refresh_token:${userId}`);
+  static async logout(req, res) {
+    try {
+      if (!req.userId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Usuario no autenticado" });
+      }
+      const userId = req.userId;
 
-    res.json({ success: true, message: 'Sesión cerrada correctamente' });
-  } catch (error) {
-    logger.error('Error en logout:', error);
-    res.status(500).json({ success: false, message: 'Error al cerrar sesión' });
+      // Obtener el refresh token actual (si lo guardaste en el login)
+      const currentRefreshToken = await redis.get(`refresh_token:${userId}`);
+
+      if (currentRefreshToken) {
+        await redis.del(`rt:${currentRefreshToken}`);
+      }
+
+      await redis.del(`refresh_token:${userId}`);
+
+      res.json({ success: true, message: "Sesión cerrada correctamente" });
+    } catch (error) {
+      logger.error("Error en logout:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Error al cerrar sesión" });
+    }
   }
-}
-  
 
   // POST /api/auth/change-password - Cambiar contraseña (usuario logueado)
   static async changePassword(req, res) {
@@ -470,29 +501,30 @@ allowedUpdates.forEach(field => {
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          message: 'Datos inválidos',
-          errors: errors.array()
+          message: "Datos inválidos",
+          errors: errors.array(),
         });
       }
 
       const { currentPassword, newPassword } = req.body;
 
-      const user = await User.findById(req.userId).select('+password');
-      
+      const user = await User.findById(req.userId).select("+password");
+
       if (!user) {
         return res.status(404).json({
           success: false,
-          message: 'Usuario no encontrado'
+          message: "Usuario no encontrado",
         });
       }
 
       // Verificar contraseña actual
-      const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-      
+      const isCurrentPasswordValid =
+        await user.comparePassword(currentPassword);
+
       if (!isCurrentPasswordValid) {
         return res.status(400).json({
           success: false,
-          message: 'Contraseña actual incorrecta'
+          message: "Contraseña actual incorrecta",
         });
       }
 
@@ -500,19 +532,33 @@ allowedUpdates.forEach(field => {
       user.password = newPassword;
       await user.save();
 
+      // ✅ INVALIDATE ALL REFRESH TOKENS after password change
+      try {
+        await invalidateUserRefreshTokens(user._id.toString());
+        logger.info("User tokens invalidated after password change", {
+          userId: user._id,
+        });
+      } catch (error) {
+        logger.error("Error invalidating tokens on password change", {
+          userId: user._id,
+          error: error.message,
+        });
+        // Don't fail the password change if token invalidation fails
+      }
+
       res.json({
         success: true,
-        message: 'Contraseña cambiada exitosamente'
+        message:
+          "Contraseña cambiada exitosamente. Por favor inicia sesión nuevamente.",
       });
-
     } catch (error) {
-      console.error('Error cambiando contraseña:', error);
+      console.error("Error cambiando contraseña:", error);
       res.status(500).json({
         success: false,
-        message: 'Error interno del servidor'
+        message: "Error interno del servidor",
       });
     }
   }
 }
 
-export default  AuthController;
+export default AuthController;
