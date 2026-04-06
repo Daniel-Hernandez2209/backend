@@ -263,11 +263,11 @@ const orderSchema = new mongoose.Schema({
 });
 
 // Índices
+// (orderNumber está indexado automáticamente con unique: true)
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ 'payment.status': 1 });
 orderSchema.index({ 'guestInfo.email': 1 });
-orderSchema.index({ orderNumber: 1 }, { unique: true });
 
 // Virtuals
 orderSchema.virtual('customerName').get(function() {

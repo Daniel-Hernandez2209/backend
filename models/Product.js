@@ -195,11 +195,10 @@ productSchema.statics.searchProducts = function (query = '', category = null, li
 
 // -----------------------------
 // Índices
+// (slug y sku están indexados automáticamente con unique: true)
 // -----------------------------
 productSchema.index({ name: 'text', description: 'text', tags: 'text' });
 productSchema.index({ category: 1, isActive: 1 });
-productSchema.index({ slug: 1 });
-productSchema.index({ sku: 1 });
 productSchema.index({ isFeatured: 1, createdAt: -1 });
 
 export default  mongoose.model('Product', productSchema);

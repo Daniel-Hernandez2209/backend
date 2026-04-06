@@ -94,9 +94,8 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// 🧩 Índices
+// 🧩 Índices (email ya está indexado con unique: true en la definición del campo)
 userSchema.index({ role: 1, isActive: 1 });
-userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ lockUntil: 1, isActive: 1 });
 userSchema.index({ createdAt: -1 });
 
