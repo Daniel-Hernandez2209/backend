@@ -161,10 +161,10 @@ app.use(
 // 🧠 CONEXIÓN A MONGODB (PERSISTENTE EN VERCEL)
 // ===========================================
 
-// ✅ Sincronizar índices: elimina duplicados y mantiene consistencia
+// ✅ Sincronizar índices: elimina duplicados y mantiene consistencia (NO BLOQUEA startup)
 const syncIndexes = async () => {
   try {
-    console.log("🔄 Iniciando sincronización de índices...");
+    logger.info("🔄 Sincronización de índices iniciada (background)");
     
     // Obtener todos los modelos registrados
     const models = Object.values(mongoose.modelNames()).map(name => mongoose.model(name));
@@ -173,42 +173,66 @@ const syncIndexes = async () => {
       try {
         const collectionName = model.collection.name;
         
-        // Eliminar índices existentes excepto _id
+        // Eliminar índices existentes excepto _id (con timeout)
         try {
-          const indexInfo = await model.collection.getIndexes();
+          const indexInfo = await Promise.race([
+            model.collection.getIndexes(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Index timeout')), 5000))
+          ]);
+          
           for (const indexKey in indexInfo) {
             if (indexKey !== '_id_') {
-              await model.collection.dropIndex(indexKey);
+              try {
+                await model.collection.dropIndex(indexKey);
+              } catch (dropErr) {
+                logger.warn(`No se pudo eliminar index ${indexKey}:`, dropErr.message);
+              }
             }
           }
-          logger.info(`Índices anteriores eliminados para: ${collectionName}`);
         } catch (err) {
-          if (!err.message.includes('ns not found') && !err.message.includes('index not found')) {
-            logger.warn(`Aviso limpiando índices de ${collectionName}:`, err.message);
+          if (!err.message.includes('ns not found') && !err.message.includes('timeout')) {
+            logger.warn(`Aviso obteniendo índices de ${collectionName}:`, err.message);
           }
         }
         
         // Recrear índices desde la definición del esquema
-        await model.collection.createIndexes();
-        console.log(`✅ Índices sincronizados para: ${collectionName}`);
+        try {
+          await Promise.race([
+            model.collection.createIndexes(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Create indexes timeout')), 5000))
+          ]);
+          logger.info(`✅ Índices sincronizados: ${collectionName}`);
+        } catch (createErr) {
+          logger.warn(`No se pudieron crear índices para ${collectionName}:`, createErr.message);
+        }
       } catch (err) {
         logger.error(`Error sincronizando índices de ${model.modelName}:`, err.message);
       }
     }
     
-    console.log("✅ Sincronización de índices completada exitosamente");
+    logger.info("✅ Sincronización de índices completada");
   } catch (error) {
     logger.error("Error durante sincronización de índices:", error.message);
   }
 };
 
+// 🚀 Iniciar servidor sin bloquear por índices
 (async () => {
   try {
     await connectDB();
     console.log("✅ Conectado a MongoDB al iniciar el servidor");
     
-    // Sincronizar índices después de conectar
-    await syncIndexes();
+    // ⚡ IMPORTANTE: NO esperar syncIndexes (evita timeout en Vercel)
+    // La sincronización ocurre en background sin bloquear
+    if (process.env.NODE_ENV !== 'production') {
+      // En desarrollo, sincronizar con timeout para feedback
+      syncIndexes().catch(err => logger.error('Sync fallido en dev:', err.message));
+    } else {
+      // En producción, sincronizar en background sin bloquear
+      setImmediate(() => {
+        syncIndexes().catch(err => logger.error('Sync fallido en production:', err.message));
+      });
+    }
   } catch (error) {
     console.error("❌ Error al conectar la base de datos:", error.message);
   }
