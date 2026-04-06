@@ -14,6 +14,13 @@ import { csrfProtection, csrfErrorHandler } from "./middleware/csrf.js";
 import logger from "./utils/logger.js";
 import connectDB from "./db.js";
 import { globalLimiter, authLimiter } from "./middleware/rateLimiter.js";
+
+// ✅ Importar modelos para registrarlos en Mongoose
+import User from "./models/User.js";
+import Product from "./models/Product.js";
+import Order from "./models/Order.js";
+// import Category from "./models/category.js"; // Agregar si es necesario
+
 dotenv.config();
 
 const app = express();
@@ -154,10 +161,54 @@ app.use(
 // 🧠 CONEXIÓN A MONGODB (PERSISTENTE EN VERCEL)
 // ===========================================
 
+// ✅ Sincronizar índices: elimina duplicados y mantiene consistencia
+const syncIndexes = async () => {
+  try {
+    console.log("🔄 Iniciando sincronización de índices...");
+    
+    // Obtener todos los modelos registrados
+    const models = Object.values(mongoose.modelNames()).map(name => mongoose.model(name));
+    
+    for (const model of models) {
+      try {
+        const collectionName = model.collection.name;
+        
+        // Eliminar índices existentes excepto _id
+        try {
+          const indexInfo = await model.collection.getIndexes();
+          for (const indexKey in indexInfo) {
+            if (indexKey !== '_id_') {
+              await model.collection.dropIndex(indexKey);
+            }
+          }
+          logger.info(`Índices anteriores eliminados para: ${collectionName}`);
+        } catch (err) {
+          if (!err.message.includes('ns not found') && !err.message.includes('index not found')) {
+            logger.warn(`Aviso limpiando índices de ${collectionName}:`, err.message);
+          }
+        }
+        
+        // Recrear índices desde la definición del esquema
+        await model.collection.createIndexes();
+        console.log(`✅ Índices sincronizados para: ${collectionName}`);
+      } catch (err) {
+        logger.error(`Error sincronizando índices de ${model.modelName}:`, err.message);
+      }
+    }
+    
+    console.log("✅ Sincronización de índices completada exitosamente");
+  } catch (error) {
+    logger.error("Error durante sincronización de índices:", error.message);
+  }
+};
+
 (async () => {
   try {
     await connectDB();
     console.log("✅ Conectado a MongoDB al iniciar el servidor");
+    
+    // Sincronizar índices después de conectar
+    await syncIndexes();
   } catch (error) {
     console.error("❌ Error al conectar la base de datos:", error.message);
   }
