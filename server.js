@@ -94,30 +94,21 @@ app.use(
 // 🌐 CONFIGURACIÓN DE CORS SEGURA
 // ===========================================
 
+// En server.js - AGREGA ESTO:
 const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      "https://athenabrand.co",
-      "https://www.athenabrand.co",
-    ];
-
-    if (process.env.NODE_ENV === "development") {
-      allowedOrigins.push("http://localhost:4200", "http://localhost:3000");
-    }
-
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("No permitido por CORS"));
-    }
-  },
+  origin: [
+    "http://localhost:4200",
+    "https://athena-brand-frontend.vercel.app",
+    "https://athena-brand-frontend-git-*.vercel.app",
+  ],
   credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
   optionsSuccessStatus: 200,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 };
 
 app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 // ===========================================
 // 🧩 PARSEO DE JSON SEGURO
@@ -165,51 +156,75 @@ app.use(
 const syncIndexes = async () => {
   try {
     logger.info("🔄 Sincronización de índices iniciada (background)");
-    
+
     // Obtener todos los modelos registrados
-    const models = Object.values(mongoose.modelNames()).map(name => mongoose.model(name));
-    
+    const models = Object.values(mongoose.modelNames()).map((name) =>
+      mongoose.model(name),
+    );
+
     for (const model of models) {
       try {
         const collectionName = model.collection.name;
-        
+
         // Eliminar índices existentes excepto _id (con timeout)
         try {
           const indexInfo = await Promise.race([
             model.collection.getIndexes(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Index timeout')), 5000))
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Index timeout")), 5000),
+            ),
           ]);
-          
+
           for (const indexKey in indexInfo) {
-            if (indexKey !== '_id_') {
+            if (indexKey !== "_id_") {
               try {
                 await model.collection.dropIndex(indexKey);
               } catch (dropErr) {
-                logger.warn(`No se pudo eliminar index ${indexKey}:`, dropErr.message);
+                logger.warn(
+                  `No se pudo eliminar index ${indexKey}:`,
+                  dropErr.message,
+                );
               }
             }
           }
         } catch (err) {
-          if (!err.message.includes('ns not found') && !err.message.includes('timeout')) {
-            logger.warn(`Aviso obteniendo índices de ${collectionName}:`, err.message);
+          if (
+            !err.message.includes("ns not found") &&
+            !err.message.includes("timeout")
+          ) {
+            logger.warn(
+              `Aviso obteniendo índices de ${collectionName}:`,
+              err.message,
+            );
           }
         }
-        
+
         // Recrear índices desde la definición del esquema
         try {
           await Promise.race([
             model.collection.createIndexes(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Create indexes timeout')), 5000))
+            new Promise((_, reject) =>
+              setTimeout(
+                () => reject(new Error("Create indexes timeout")),
+                5000,
+              ),
+            ),
           ]);
           logger.info(`✅ Índices sincronizados: ${collectionName}`);
         } catch (createErr) {
-          logger.warn(`No se pudieron crear índices para ${collectionName}:`, createErr.message);
+          logger.warn(
+            `No se pudieron crear índices para ${collectionName}:`,
+            createErr.message,
+          );
         }
       } catch (err) {
-        logger.error(`Error sincronizando índices de ${model.modelName}:`, err.message);
+        logger.error(
+          `Error sincronizando índices de ${model.modelName}:`,
+          err.message,
+        );
       }
     }
-    
+
     logger.info("✅ Sincronización de índices completada");
   } catch (error) {
     logger.error("Error durante sincronización de índices:", error.message);
@@ -221,16 +236,20 @@ const syncIndexes = async () => {
   try {
     await connectDB();
     console.log("✅ Conectado a MongoDB al iniciar el servidor");
-    
+
     // ⚡ IMPORTANTE: NO esperar syncIndexes (evita timeout en Vercel)
     // La sincronización ocurre en background sin bloquear
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== "production") {
       // En desarrollo, sincronizar con timeout para feedback
-      syncIndexes().catch(err => logger.error('Sync fallido en dev:', err.message));
+      syncIndexes().catch((err) =>
+        logger.error("Sync fallido en dev:", err.message),
+      );
     } else {
       // En producción, sincronizar en background sin bloquear
       setImmediate(() => {
-        syncIndexes().catch(err => logger.error('Sync fallido en production:', err.message));
+        syncIndexes().catch((err) =>
+          logger.error("Sync fallido en production:", err.message),
+        );
       });
     }
   } catch (error) {
