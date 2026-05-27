@@ -9,7 +9,22 @@ let redisClient;
  */
 export const getRedisClient = () => {
   if (!redisClient) {
-    redisClient = Redis.fromEnv();
+    // Support both Upstash env vars and REDIS_URL
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      redisClient = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      });
+    } else if (process.env.REDIS_URL) {
+      // Parse REDIS_URL format: https://default:password@host.upstash.io
+      const url = new URL(process.env.REDIS_URL);
+      redisClient = new Redis({
+        url: process.env.REDIS_URL,
+        token: url.password || "default",
+      });
+    } else {
+      throw new Error("Redis configuration not found. Set UPSTASH_REDIS_REST_URL/TOKEN or REDIS_URL");
+    }
   }
   return redisClient;
 };
@@ -22,6 +37,12 @@ export const getRedisClient = () => {
  */
 export const storeRefreshToken = async (userId, refreshToken, ttl = 604800) => {
   try {
+    // Skip Redis if not configured (development mode)
+    if (!process.env.UPSTASH_REDIS_REST_URL && !process.env.REDIS_URL) {
+      logger.warn("Redis not configured - skipping token storage", { userId });
+      return;
+    }
+
     const redis = getRedisClient();
     // Store direct mapping
     await redis.setex(`refresh_token:${userId}`, ttl, refreshToken);
@@ -36,6 +57,11 @@ export const storeRefreshToken = async (userId, refreshToken, ttl = 604800) => {
       error: error.message,
       userId,
     });
+    // Don't fail auth if Redis is unavailable in development
+    if (process.env.NODE_ENV === 'development') {
+      logger.warn("Continuing without Redis (development mode)");
+      return;
+    }
     throw error;
   }
 };
@@ -47,6 +73,11 @@ export const storeRefreshToken = async (userId, refreshToken, ttl = 604800) => {
  */
 export const getRefreshTokenUserId = async (refreshToken) => {
   try {
+    // Skip Redis if not configured (development mode)
+    if (!process.env.UPSTASH_REDIS_REST_URL && !process.env.REDIS_URL) {
+      return null;
+    }
+
     const redis = getRedisClient();
     return await redis.get(`rt:${refreshToken}`);
   } catch (error) {
@@ -61,6 +92,12 @@ export const getRefreshTokenUserId = async (refreshToken) => {
  */
 export const invalidateUserRefreshTokens = async (userId) => {
   try {
+    // Skip Redis if not configured (development mode)
+    if (!process.env.UPSTASH_REDIS_REST_URL && !process.env.REDIS_URL) {
+      logger.warn("Redis not configured - skipping token invalidation", { userId });
+      return;
+    }
+
     const redis = getRedisClient();
 
     // Get all refresh tokens for this user

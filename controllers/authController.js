@@ -20,7 +20,6 @@ const redis = Redis.fromEnv();
 const generateTokenPair = async (userId, role) => {
   const accessToken = jwt.sign({ userId, role }, process.env.JWT_SECRET, {
     expiresIn: "15m",
-    algorithms: ["HS256"],
   });
 
   const refreshToken = crypto.randomBytes(40).toString("hex");
@@ -56,12 +55,10 @@ class AuthController {
       const userId = await redis.get(`rt:${refreshToken}`);
 
       if (!userId) {
-        return res
-          .status(401)
-          .json({
-            success: false,
-            message: "Refresh token inválido o expirado",
-          });
+        return res.status(401).json({
+          success: false,
+          message: "Refresh token inválido o expirado",
+        });
       }
 
       const user = await User.findById(userId);

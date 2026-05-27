@@ -133,7 +133,9 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // ✅ CSRF Protection Setup
 app.use(cookieParser());
-app.use(csrfProtection);
+if (process.env.NODE_ENV === "production") {
+  app.use(csrfProtection);
+}
 
 // ===========================================
 // 🗂️ ARCHIVOS ESTÁTICOS
@@ -388,6 +390,16 @@ app.use("*", (req, res) => {
     ];
   }
   res.status(404).json(response);
+});
+// ===========================================
+// 🚀 INICIAR SERVIDOR
+// ===========================================
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 API disponible en http://localhost:${PORT}/api`);
 });
 
 export default app;
