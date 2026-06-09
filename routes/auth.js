@@ -1,31 +1,33 @@
 // routes/auth.js - Rutas de autenticación con seguridad avanzada
-import express from 'express';
-import { body, validationResult } from 'express-validator';
-import rateLimit from 'express-rate-limit';
-import helmet from 'helmet';
-import AuthController from '../controllers/authController.js';
-import { auth } from '../middleware/auth.js';
+import express from "express";
+import { body, validationResult } from "express-validator";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import AuthController from "../controllers/authController.js";
+import { auth } from "../middleware/auth.js";
 
 const router = express.Router();
 
 // ========================================
 // SEGURIDAD CON HELMET
 // ========================================
-router.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://tudominiofront.vercel.app"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:", "https://res.cloudinary.com"]
-    }
-  },
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true
-  }
-}));
+router.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "https://tudominiofront.vercel.app"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:", "https://res.cloudinary.com"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+  }),
+);
 
 // ========================================
 // RATE LIMITERS
@@ -37,7 +39,8 @@ const authLimiter = rateLimit({
   max: 5,
   message: {
     success: false,
-    message: 'Demasiados intentos de autenticación. Intenta de nuevo en 15 minutos.'
+    message:
+      "Demasiados intentos de autenticación. Intenta de nuevo en 15 minutos.",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -49,7 +52,7 @@ const passwordResetLimiter = rateLimit({
   max: 3,
   message: {
     success: false,
-    message: 'Demasiados intentos de recuperación. Intenta de nuevo en 1 hora.'
+    message: "Demasiados intentos de recuperación. Intenta de nuevo en 1 hora.",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -61,7 +64,7 @@ const generalLimiter = rateLimit({
   max: 30,
   message: {
     success: false,
-    message: 'Demasiadas solicitudes. Reduce la velocidad.'
+    message: "Demasiadas solicitudes. Reduce la velocidad.",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -72,69 +75,79 @@ const generalLimiter = rateLimit({
 // ========================================
 
 const registerValidation = [
-  body('email').isEmail().normalizeEmail().withMessage('Email no válido'),
-  body('password')
+  body("email").isEmail().normalizeEmail().withMessage("Email no válido"),
+  body("password")
     .isLength({ min: 8 })
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial'),
-  body('firstName')
-    .trim().escape()
+    .withMessage(
+      "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial",
+    ),
+  body("firstName")
+    .trim()
+    .escape()
     .isLength({ min: 2, max: 50 })
     .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-']+$/)
-    .withMessage('El nombre solo puede contener letras y espacios'),
-  body('lastName')
-    .trim().escape()
+    .withMessage("El nombre solo puede contener letras y espacios"),
+  body("lastName")
+    .trim()
+    .escape()
     .isLength({ min: 2, max: 50 })
     .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-']+$/)
-    .withMessage('El apellido solo puede contener letras y espacios'),
-  body('phone')
+    .withMessage("El apellido solo puede contener letras y espacios"),
+  body("phone")
     .optional()
     .matches(/^\+?[1-9]\d{1,14}$/)
-    .withMessage('Formato de teléfono no válido'),
+    .withMessage("Formato de teléfono no válido"),
 ];
 
 const loginValidation = [
-  body('email').isEmail().normalizeEmail().withMessage('Email no válido'),
-  body('password').notEmpty().withMessage('La contraseña es requerida'),
+  body("email").isEmail().normalizeEmail().withMessage("Email no válido"),
+  body("password").notEmpty().withMessage("La contraseña es requerida"),
 ];
 
 const updateProfileValidation = [
-  body('firstName')
-    .optional().trim().escape()
+  body("firstName")
+    .optional()
+    .trim()
+    .escape()
     .isLength({ min: 2, max: 50 })
     .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-']+$/),
-  body('lastName')
-    .optional().trim().escape()
+  body("lastName")
+    .optional()
+    .trim()
+    .escape()
     .isLength({ min: 2, max: 50 })
     .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s\-']+$/),
-  body('phone')
+  body("phone")
     .optional()
     .matches(/^\+?[1-9]\d{1,14}$/)
-    .withMessage('Formato de teléfono no válido'),
+    .withMessage("Formato de teléfono no válido"),
 ];
 
 const changePasswordValidation = [
-  body('currentPassword').notEmpty().withMessage('Contraseña actual requerida'),
-  body('newPassword')
+  body("currentPassword").notEmpty().withMessage("Contraseña actual requerida"),
+  body("newPassword")
     .isLength({ min: 8 })
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('La nueva contraseña debe tener 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial')
+    .withMessage(
+      "La nueva contraseña debe tener 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial",
+    ),
 ];
 
 const resetPasswordValidation = [
-  body('token')
+  body("token")
     .notEmpty()
     .isLength({ min: 32, max: 512 })
     .matches(/^[a-zA-Z0-9+/=.-]+$/)
-    .withMessage('Token inválido'),
-  body('password')
+    .withMessage("Token inválido"),
+  body("password")
     .isLength({ min: 8 })
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('La contraseña debe cumplir los requisitos de seguridad')
+    .withMessage("La contraseña debe cumplir los requisitos de seguridad"),
 ];
 
 const forgotPasswordValidation = [
-  body('email').isEmail().normalizeEmail().withMessage('Email no válido')
+  body("email").isEmail().normalizeEmail().withMessage("Email no válido"),
 ];
 
 // ========================================
@@ -145,7 +158,7 @@ const validate = (req, res, next) => {
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
-      message: 'Errores de validación',
+      message: "Errores de validación",
       errors: errors.array(),
     });
   }
@@ -155,84 +168,80 @@ const validate = (req, res, next) => {
 // ========================================
 // RUTAS PÚBLICAS
 // ========================================
-router.post('/register',
+router.post(
+  "/register",
   generalLimiter,
   registerValidation,
   validate,
-  AuthController.register
+  AuthController.register,
 );
 
-router.post('/login',
+router.post(
+  "/login",
   authLimiter,
   loginValidation,
   validate,
-  AuthController.login
+  AuthController.login,
 );
 
-router.post('/verify-email',
-  generalLimiter,
-  AuthController.verifyEmail
-);
+router.post("/verify-email", generalLimiter, AuthController.verifyEmail);
 
-router.post('/forgot-password',
+router.post(
+  "/forgot-password",
   passwordResetLimiter,
   forgotPasswordValidation,
   validate,
-  AuthController.forgotPassword
+  AuthController.forgotPassword,
 );
 
-router.post('/reset-password',
+router.post(
+  "/reset-password",
   passwordResetLimiter,
   resetPasswordValidation,
   validate,
-  AuthController.resetPassword
+  AuthController.resetPassword,
 );
 
 // ========================================
 // RUTAS PROTEGIDAS
 // ========================================
-router.get('/me',
-  generalLimiter,
-  auth,
-  AuthController.getProfile
-);
+router.get("/me", generalLimiter, auth, AuthController.getProfile);
 
-router.put('/profile',
+router.put(
+  "/profile",
   generalLimiter,
   auth,
   updateProfileValidation,
   validate,
-  AuthController.updateProfile
+  AuthController.updateProfile,
 );
 
-router.post('/change-password',
+router.post(
+  "/change-password",
   generalLimiter,
   auth,
   changePasswordValidation,
   validate,
-  AuthController.changePassword
+  AuthController.changePassword,
 );
 
-router.post('/refresh-token',
+router.post(
+  "/refresh-token",
   generalLimiter,
   auth,
-  AuthController.refreshToken
+  AuthController.refreshToken,
 );
 
-router.post('/logout',
-  generalLimiter,
-  auth,
-  AuthController.logout
-);
+router.post("/logout", generalLimiter, auth, AuthController.logout);
 
 // ========================================
 // MANEJO DE ERRORES GLOBAL
 // ========================================
 router.use((error, req, res, next) => {
-  console.error('❌ Error en rutas de autenticación:', error);
+  console.error("❌ Error en rutas de autenticación:", error);
   return res.status(error.status || 500).json({
     success: false,
-    message: error.message || 'Error interno del servidor',
+    message: error.message || "Error interno del servidor",
   });
 });
 
