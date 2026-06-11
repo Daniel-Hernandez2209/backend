@@ -6,20 +6,19 @@ import sendEmail from "../utils/sendEmail.js";
 import logger from "../utils/logger.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { Redis } from "@upstash/redis";
 import validator from "validator";
 import xss from "xss";
 import {
+  getRedisClient,
   storeRefreshToken,
   invalidateUserRefreshTokens,
 } from "../utils/redis.js";
 
-const redis = Redis.fromEnv();
-
 // Función para generar JWT
 const generateTokenPair = async (userId, role) => {
+  const expiresIn = process.env.JWT_EXPIRES_IN || "15m";
   const accessToken = jwt.sign({ userId, role }, process.env.JWT_SECRET, {
-    expiresIn: "15m",
+    expiresIn,
   });
 
   const refreshToken = crypto.randomBytes(40).toString("hex");
@@ -52,7 +51,7 @@ class AuthController {
       }
 
       // ✅ Obtener userId directamente desde el índice inverso
-      const userId = await redis.get(`rt:${refreshToken}`);
+      const userId = await getRedisClient().get(`rt:${refreshToken}`);
 
       if (!userId) {
         return res.status(401).json({
@@ -64,7 +63,7 @@ class AuthController {
       const user = await User.findById(userId);
       if (!user || !user.isActive) {
         // Opcional: limpiar token huérfano
-        await redis.del(`rt:${refreshToken}`);
+        await getRedisClient().del(`rt:${refreshToken}`);
         return res
           .status(401)
           .json({ success: false, message: "Usuario no válido" });
@@ -74,8 +73,8 @@ class AuthController {
       const newTokens = await generateTokenPair(user._id);
 
       // Opcional: eliminar el refresh token antiguo (mejor seguridad)
-      await redis.del(`rt:${refreshToken}`);
-      await redis.del(`refresh_token:${userId}`);
+      await getRedisClient().del(`rt:${refreshToken}`);
+      await getRedisClient().del(`refresh_token:${userId}`);
 
       res.json({
         success: true,
@@ -474,13 +473,13 @@ class AuthController {
       const userId = req.userId;
 
       // Obtener el refresh token actual (si lo guardaste en el login)
-      const currentRefreshToken = await redis.get(`refresh_token:${userId}`);
+      const currentRefreshToken = await getRedisClient().get(`refresh_token:${userId}`);
 
       if (currentRefreshToken) {
-        await redis.del(`rt:${currentRefreshToken}`);
+        await getRedisClient().del(`rt:${currentRefreshToken}`);
       }
 
-      await redis.del(`refresh_token:${userId}`);
+      await getRedisClient().del(`refresh_token:${userId}`);
 
       res.json({ success: true, message: "Sesión cerrada correctamente" });
     } catch (error) {

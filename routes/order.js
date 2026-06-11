@@ -206,18 +206,21 @@ router.delete('/:id',
 // ========================================
 router.get('/admin/all',
   adminLimiter,
+  auth,
   adminAuth,
   OrderController.getAllOrdersAdmin
 );
 
 router.get('/admin/stats',
   adminLimiter,
+  auth,
   adminAuth,
   OrderController.getOrderStats
 );
 
 router.put('/:id/status',
   adminLimiter,
+  auth,
   adminAuth,
   validateOrderId,
   updateStatusValidation,

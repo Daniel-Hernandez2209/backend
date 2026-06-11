@@ -19,12 +19,12 @@ export const getRedisClient = () => {
         token: process.env.UPSTASH_REDIS_REST_TOKEN,
       });
     } else if (process.env.REDIS_URL) {
-      // Parse REDIS_URL format: https://default:password@host.upstash.io
-      const url = new URL(process.env.REDIS_URL);
-      redisClient = new Redis({
-        url: process.env.REDIS_URL,
-        token: url.password || "default",
-      });
+      // Parse REDIS_URL format: https://default:TOKEN@host.upstash.io
+      // Upstash SDK needs clean URL (no credentials) + token separately
+      const parsed = new URL(process.env.REDIS_URL);
+      const cleanUrl = `${parsed.protocol}//${parsed.host}`;
+      const token = parsed.password || parsed.username || "default";
+      redisClient = new Redis({ url: cleanUrl, token });
     } else {
       throw new Error(
         "Redis configuration not found. Set UPSTASH_REDIS_REST_URL/TOKEN or REDIS_URL",
