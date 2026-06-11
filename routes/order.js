@@ -83,7 +83,7 @@ const handleValidationErrors = (req, res, next) => {
 
 const validateOrderNumber = [
   param('orderNumber')
-    .matches(/^[A-Z0-9]{8,20}$/)
+    .matches(/^[A-Z0-9-]{8,25}$/)
     .withMessage('Número de pedido inválido')
 ];
 
@@ -134,7 +134,7 @@ const createOrderValidation = [
 
 const confirmPaymentValidation = [
   param('orderNumber')
-    .matches(/^[A-Z0-9]{8,20}$/)
+    .matches(/^[A-Z0-9-]{8,25}$/)
     .withMessage('Número de pedido inválido'),
   body('paymentId')
     .isAlphanumeric()

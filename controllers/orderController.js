@@ -187,7 +187,7 @@ class OrderController {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select("-__v");
+        .select("-__v -guestAccessToken");
 
       const total = await Order.countDocuments({ user: req.userId });
 
@@ -243,7 +243,7 @@ class OrderController {
       const order = await Order.findOne(filter)
         .populate("items.product", "name images slug category")
         .populate("user", "firstName lastName email")
-        .select("-__v");
+        .select("-__v -guestAccessToken");
 
       if (!order) {
         return res
@@ -370,7 +370,7 @@ class OrderController {
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
-          .select("-__v");
+          .select("-__v -guestAccessToken");
         total = await Order.countDocuments(filter);
       }
 

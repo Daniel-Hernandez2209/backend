@@ -54,6 +54,10 @@ const orderSchema = new mongoose.Schema({
     }
   },
 
+  guestAccessToken: {
+    type: String
+  },
+
   orderNumber: {
     type: String,
     unique: true

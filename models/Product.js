@@ -131,7 +131,7 @@ productSchema.virtual('effectivePrice').get(function () {
   return this.discountPrice && this.discountPrice > 0 ? this.discountPrice : this.price;
 });
 productSchema.virtual('totalStock').get(function () {
-  return this.sizes.reduce((acc, s) => acc + (s.stock || 0), 0);
+  return (this.sizes || []).reduce((acc, s) => acc + (s.stock || 0), 0);
 });
 productSchema.virtual('hasDiscount').get(function () {
   return this.discountPrice && this.discountPrice < this.price;
