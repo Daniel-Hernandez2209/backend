@@ -467,7 +467,7 @@ class CategoryController {
       //   });
       // }
 
-      await category.remove();
+      await category.deleteOne();
       
       // Limpiar caché
       CategoryController.clearCache();

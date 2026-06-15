@@ -346,6 +346,20 @@ class OrderController {
   }
 
   // GET /api/orders/admin/all - Solo admin
+  static async getOrderById(req, res) {
+    try {
+      const { id } = req.params;
+      const order = await Order.findById(id)
+        .populate('items.product', 'name images slug category sku')
+        .populate('user', 'firstName lastName email phone')
+        .select('-__v -guestAccessToken');
+      if (!order) return res.status(404).json({ success: false, message: 'Pedido no encontrado' });
+      res.json({ success: true, data: order });
+    } catch (error) {
+      res.status(500).json({ success: false, message: 'Error al obtener pedido' });
+    }
+  }
+
   static async getAllOrdersAdmin(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;

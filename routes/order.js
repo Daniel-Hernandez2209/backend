@@ -211,6 +211,15 @@ router.get('/admin/all',
   OrderController.getAllOrdersAdmin
 );
 
+router.get('/admin/detail/:id',
+  generalLimiter,
+  auth,
+  adminAuth,
+  validateOrderId,
+  handleValidationErrors,
+  OrderController.getOrderById
+);
+
 router.get('/admin/stats',
   adminLimiter,
   auth,

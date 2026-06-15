@@ -4,7 +4,7 @@ import { body, param, query, validationResult } from 'express-validator';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import ProductController from '../controllers/productController.js';
-import { adminAuth } from '../middleware/auth.js';
+import { auth, adminAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -76,7 +76,7 @@ const productValidation = [
     .isFloat({ min: 0.01, max: 999999 })
     .withMessage('El precio debe ser un número entre 0.01 y 999999'),
   body('discountPrice')
-    .optional()
+    .optional({ nullable: true })
     .isFloat({ min: 0.01, max: 999999 })
     .withMessage('El precio con descuento debe ser un número entre 0.01 y 999999'),
   body('category')
@@ -94,10 +94,13 @@ const productValidation = [
   body('images')
     .isArray({ min: 1, max: 10 })
     .withMessage('Debe incluir entre 1 y 10 imágenes'),
-  body('images.*')
+  body('images.*.url')
     .isURL({ protocols: ['http', 'https'] })
-    .matches(/\.(jpg|jpeg|png|webp)(\?.*)?$/i)
-    .withMessage('Las imágenes deben ser URLs válidas con formato jpg, jpeg, png o webp')
+    .withMessage('La URL de imagen no es válida'),
+  body('images.*.isPrimary')
+    .optional()
+    .isBoolean()
+    .withMessage('isPrimary debe ser booleano')
 ];
 
 const stockUpdateValidation = [
@@ -160,25 +163,26 @@ const batchValidation = [
 ];
 
 // ========================================
-// RUTAS PÚBLICAS
+// RUTAS DE ADMINISTRADOR (deben ir ANTES de /:slug)
+// ========================================
+router.get('/admin/analytics/stats', auth, adminAuth, ProductController.getProductStats);
+router.get('/admin/export', auth, adminAuth, ProductController.exportProducts);
+router.get('/admin/all', auth, adminAuth, ProductController.getAllProductsAdmin);
+router.get('/admin/:id', auth, adminAuth, idValidation, handleValidation, ProductController.getProductById);
+
+router.post('/', auth, adminAuth, adminLimiter, productValidation, handleValidation, ProductController.createProduct);
+router.put('/:id', auth, adminAuth, adminLimiter, idValidation, productValidation, handleValidation, ProductController.updateProduct);
+router.delete('/:id', auth, adminAuth, adminLimiter, idValidation, handleValidation, ProductController.deleteProduct);
+router.put('/:id/stock', auth, adminAuth, adminLimiter, idValidation, stockUpdateValidation, handleValidation, ProductController.updateStock);
+router.post('/batch', auth, adminAuth, adminLimiter, batchValidation, handleValidation, ProductController.batchOperations);
+
+// ========================================
+// RUTAS PÚBLICAS (/:slug debe ir al final)
 // ========================================
 router.get('/', ProductController.getAllProducts);
 router.get('/search', searchLimiter, searchValidation, handleValidation, ProductController.searchProducts);
 router.get('/category/:category', categoryValidation, handleValidation, ProductController.getProductsByCategory);
 router.get('/featured', ProductController.getFeaturedProducts);
 router.get('/:slug', ProductController.getProductBySlug);
-
-// ========================================
-// RUTAS DE ADMINISTRADOR
-// ========================================
-router.get('/admin/analytics/stats', adminAuth, ProductController.getProductStats);
-router.get('/admin/export', adminAuth, ProductController.exportProducts);
-router.get('/admin/all', adminAuth, ProductController.getAllProductsAdmin);
-
-router.post('/', adminAuth, adminLimiter, productValidation, handleValidation, ProductController.createProduct);
-router.put('/:id', adminAuth, adminLimiter, idValidation, productValidation, handleValidation, ProductController.updateProduct);
-router.delete('/:id', adminAuth, adminLimiter, idValidation, handleValidation, ProductController.deleteProduct);
-router.put('/:id/stock', adminAuth, adminLimiter, idValidation, stockUpdateValidation, handleValidation, ProductController.updateStock);
-router.post('/batch', adminAuth, adminLimiter, batchValidation, handleValidation, ProductController.batchOperations);
 
 export default router;

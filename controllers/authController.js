@@ -70,7 +70,7 @@ class AuthController {
       }
 
       // Generar nuevos tokens
-      const newTokens = await generateTokenPair(user._id);
+      const newTokens = await generateTokenPair(user._id, user.role);
 
       // Opcional: eliminar el refresh token antiguo (mejor seguridad)
       await getRedisClient().del(`rt:${refreshToken}`);
@@ -312,8 +312,9 @@ class AuthController {
         });
       }
 
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
       const user = await User.findOne({
-        verificationToken: token,
+        verificationTokenHash: hashedToken,
         verificationTokenExpires: { $gt: Date.now() },
       });
 
@@ -325,7 +326,7 @@ class AuthController {
       }
 
       user.isVerified = true;
-      user.verificationToken = undefined;
+      user.verificationTokenHash = undefined;
       user.verificationTokenExpires = undefined;
 
       await user.save();
@@ -419,8 +420,9 @@ class AuthController {
 
       const { token, password } = req.body;
 
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
       const user = await User.findOne({
-        passwordResetToken: token,
+        passwordResetTokenHash: hashedToken,
         passwordResetExpires: { $gt: Date.now() },
       });
 
@@ -432,7 +434,7 @@ class AuthController {
       }
 
       user.password = password;
-      user.passwordResetToken = undefined;
+      user.passwordResetTokenHash = undefined;
       user.passwordResetExpires = undefined;
 
       await user.save();

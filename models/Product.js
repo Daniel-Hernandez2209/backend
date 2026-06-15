@@ -44,10 +44,6 @@ const productSchema = new mongoose.Schema({
   discountPrice: {
     type: Number,
     min: 0,
-    validate: {
-      validator(v) { return !v || v <= this.price; },
-      message: 'El precio con descuento debe ser menor o igual al original',
-    },
   },
 
   images: [{

@@ -11,13 +11,17 @@ import  validateImage  from '../middleware/validateImage.js';
 const router = express.Router();
 
 // ----------------------------
-// Configuración de Cloudinary
+// Cloudinary se configura en cada request para asegurar que
+// las env vars ya fueron cargadas por dotenv (problema de hoisting ESM)
 // ----------------------------
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const getCloudinary = () => {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+  return cloudinary;
+};
 
 // ----------------------------
 // Configuración de multer
@@ -53,7 +57,7 @@ const uploadToCloudinary = (fileBuffer, folder, options = {}) => {
       ...options,
     };
 
-    const uploadStream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+    const uploadStream = getCloudinary().uploader.upload_stream(uploadOptions, (error, result) => {
       if (error) reject(error);
       else resolve(result);
     });
@@ -67,10 +71,13 @@ const uploadToCloudinary = (fileBuffer, folder, options = {}) => {
 // ----------------------------
 
 // Subida de imágenes de productos
-router.post('/products', adminAuth, upload.array('images', 5),validateImage, async (req, res) => {
+router.post('/products', auth, adminAuth, upload.any(), validateImage, async (req, res) => {
   try {
     if (!req.files?.length) {
       return res.status(400).json({ success: false, message: 'No se subieron archivos' });
+    }
+    if (req.files.length > 5) {
+      return res.status(400).json({ success: false, message: 'Máximo 5 imágenes por producto' });
     }
 
     const results = await Promise.all(
@@ -134,7 +141,7 @@ router.post('/avatar', auth, upload.single('avatar'),validateImage, async (req, 
 });
 
 // Subida de imágenes de categorías
-router.post('/categories', adminAuth, upload.single('image'), validateImage,async (req, res) => {
+router.post('/categories', auth, adminAuth, upload.single('image'), validateImage, async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No se subió archivo' });
 
@@ -160,9 +167,9 @@ router.post('/categories', adminAuth, upload.single('image'), validateImage,asyn
 });
 
 // Ver uso de Cloudinary
-router.get('/usage', adminAuth,async (req, res) => {
+router.get('/usage', auth, adminAuth, async (req, res) => {
   try {
-    const usage = await cloudinary.api.usage();
+    const usage = await getCloudinary().api.usage();
     res.json({
       success: true,
       usage: {
@@ -180,7 +187,7 @@ router.get('/usage', adminAuth,async (req, res) => {
 });
 
 // Eliminar archivo de Cloudinary
-router.delete('/:public_id', adminAuth, async (req, res) => {
+router.delete('/:public_id', auth, adminAuth, async (req, res) => {
   try {
     const { public_id } = req.params;
 
@@ -188,7 +195,7 @@ router.delete('/:public_id', adminAuth, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Public ID inválido' });
     }
 
-    const result = await cloudinary.uploader.destroy(public_id);
+    const result = await getCloudinary().uploader.destroy(public_id);
     if (result.result === 'ok') {
       logger.info('Archivo eliminado de Cloudinary', { userId: req.user?.id, publicId: public_id });
       res.json({ success: true, message: 'Archivo eliminado exitosamente' });

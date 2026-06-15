@@ -228,7 +228,6 @@ router.post(
 router.post(
   "/refresh-token",
   generalLimiter,
-  auth,
   AuthController.refreshToken,
 );
 

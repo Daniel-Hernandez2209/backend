@@ -364,6 +364,24 @@ class ProductController {
   }
 
   // -----------------------------
+  // GET /api/products/admin/:id - Solo admin
+  // -----------------------------
+  static async getProductById(req, res) {
+    try {
+      const { id } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, message: 'ID inválido' });
+      }
+      const product = await Product.findById(id).select('-__v');
+      if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+      res.json({ success: true, product });
+    } catch (error) {
+      logger.error('Error en getProductById', { error: error.message, productId: req.params.id });
+      res.status(500).json({ success: false, message: 'Error al obtener producto' });
+    }
+  }
+
+  // -----------------------------
   // POST /api/products - Solo admin
   // -----------------------------
   static async createProduct(req, res) {
@@ -426,7 +444,14 @@ class ProductController {
         updateData.slug = await ensureUniqueSlug(baseSlug, id);
       }
 
-      const product = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, select: '-__v' });
+      // Validar discountPrice < price a nivel de controlador (funciona con findByIdAndUpdate)
+      if (updateData.discountPrice != null && updateData.price != null) {
+        if (updateData.discountPrice >= updateData.price) {
+          return res.status(400).json({ success: false, message: 'El precio con descuento debe ser menor al precio original' });
+        }
+      }
+
+      const product = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: false, select: '-__v' });
       if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
 
       logger.info('Producto actualizado', { userId: req.user?.id, productId: product._id, changes: updateData });
