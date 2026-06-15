@@ -38,6 +38,25 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // ===========================================
+// 🌐 CORS — debe ir PRIMERO para que todas las respuestas incluyan los headers
+// ===========================================
+
+const corsOptions = {
+  origin: [
+    "http://localhost:4200",
+    "https://athena-brand-frontend.vercel.app",
+    "https://athena-brand-frontend-git-*.vercel.app",
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+// ===========================================
 // ⚙️ MIDDLEWARE DE SEGURIDAD Y OPTIMIZACIÓN
 // ===========================================
 
@@ -89,26 +108,6 @@ app.use(
     },
   }),
 );
-
-// ===========================================
-// 🌐 CONFIGURACIÓN DE CORS SEGURA
-// ===========================================
-
-// En server.js - AGREGA ESTO:
-const corsOptions = {
-  origin: [
-    "http://localhost:4200",
-    "https://athena-brand-frontend.vercel.app",
-    "https://athena-brand-frontend-git-*.vercel.app",
-  ],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
-  optionsSuccessStatus: 200,
-};
-
-app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 
 // ===========================================
 // 🧩 PARSEO DE JSON SEGURO
