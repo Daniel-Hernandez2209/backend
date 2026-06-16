@@ -77,6 +77,7 @@ const userSchema = new mongoose.Schema({
   },
   isActive: { type: Boolean, default: true },
   isVerified: { type: Boolean, default: false },
+  deletedAt: { type: Date, default: null },
 
   // 🔐 Control de intentos y bloqueos
   loginAttempts: { type: Number, default: 0, min: [0, 'Intentos inválidos'] },

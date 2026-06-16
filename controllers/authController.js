@@ -2,7 +2,7 @@
 import jwt from "jsonwebtoken";
 import { validationResult } from "express-validator";
 import User from "../models/User.js";
-import sendEmail from "../utils/sendEmail.js";
+import { sendEmail } from "../utils/sendEmail.js";
 import logger from "../utils/logger.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -378,7 +378,7 @@ class AuthController {
           data: {
             firstName: user.firstName,
             resetToken,
-            resetUrl: `${process.env.FRONTEND_URL}/resetear-password?token=${resetToken}`,
+            resetUrl: `${process.env.FRONTEND_URL}/auth/reset-password?token=${resetToken}`,
           },
         });
       } catch (emailError) {

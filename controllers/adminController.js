@@ -34,8 +34,14 @@ const AdminController = {
       const limit = parseInt(req.query.limit) || 20;
       const skip = (page - 1) * limit;
 
-      // Filtros opcionales
-      const filters = {};
+      // Excluir soft-deleted: cubre tanto los que tienen deletedAt como
+      // los eliminados antes de que el campo existiera en el schema (email con prefijo deleted_)
+      const filters = {
+        $and: [
+          { $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }] },
+          { email: { $not: /^deleted_/ } }
+        ]
+      };
 
       // Filtrar por rol
       if (req.query.role) {
@@ -167,7 +173,7 @@ const AdminController = {
         lastName,
         email: email.toLowerCase().trim(),
         password,
-        role: role || "customer",
+        role: role || "user",
         phone,
         isVerified: true, // Admin crea usuarios ya verificados
         isActive: true,
@@ -257,7 +263,7 @@ const AdminController = {
       }
 
       // Prevenir que el último admin se quite su propio rol
-      if (updates.role === "customer" && id === req.user.id) {
+      if (updates.role === "user" && id === req.user.id) {
         const adminCount = await User.countDocuments({
           role: "admin",
           isActive: true,
@@ -357,16 +363,16 @@ const AdminController = {
         }
       }
 
-      // Soft delete: marcar como inactivo en lugar de eliminar
-      user.isActive = false;
-      user.email = `deleted_${Date.now()}_${user.email}`; // Liberar email
-      await user.save();
+      // Soft delete: marcar como inactivo y liberar el email
+      const deletedEmail = `deleted_${Date.now()}_${user.email}`;
+      await User.findByIdAndUpdate(
+        id,
+        { isActive: false, email: deletedEmail, deletedAt: new Date() },
+        { runValidators: false }
+      );
 
       logger.warn(`Usuario ${id} eliminado por admin ${req.user.id}`, {
-        deletedUser: {
-          email: user.email,
-          role: user.role,
-        },
+        deletedUser: { email: user.email, role: user.role },
       });
 
       res.json({
@@ -673,7 +679,7 @@ const AdminController = {
         });
       }
 
-      if (!["customer", "admin", "moderator"].includes(role)) {
+      if (!["user", "admin"].includes(role)) {
         return res.status(400).json({
           success: false,
           message: "Rol inválido",
@@ -681,7 +687,7 @@ const AdminController = {
       }
 
       // No permitir que un admin se quite su propio rol
-      if (id === req.user.id && role !== "admin") {
+      if (id === req.user.id && role === "user") {
         const adminCount = await User.countDocuments({
           role: "admin",
           isActive: true,

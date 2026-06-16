@@ -12,7 +12,8 @@ const globalLimiter = rateLimit({
   message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
-   validate: { xForwardedForHeader: false } 
+  skip: (req) => process.env.NODE_ENV === 'development',
+   validate: { xForwardedForHeader: false }
 });
 
 // Para rutas públicas generales (lectura)
@@ -49,19 +50,16 @@ const heavyReadLimiter = rateLimit({
 // Para rutas administrativas (escritura)
 const adminWriteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50, // Moderado para admins
+  max: process.env.NODE_ENV === 'development' ? 1000 : 50,
   message: {
     success: false,
-    message: 'Demasiadas operaciones administrativas. Intenta en 15 minutos.'
+    message: 'Demasiadas solicitudes al área administrativa. Intenta en 15 minutos.'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Puedes usar un keyGenerator personalizado para identificar por usuario
-  keyGenerator: (req) => {
-    // Si tienes el user ID del admin autenticado
-    return req.user?.id || req.ip;
-  },
-   validate: { xForwardedForHeader: false } 
+  keyGenerator: (req) => req.user?.id || req.ip,
+  skip: (req) => process.env.NODE_ENV === 'development',
+   validate: { xForwardedForHeader: false }
 });
 // Para rutas de autenticación (login, registro)
 const authLimiter = rateLimit({
@@ -76,14 +74,15 @@ const authLimiter = rateLimit({
 // Para operaciones críticas de admin (toggle, delete)
 const criticalAdminLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hora
-  max: 20, // Muy restrictivo
+  max: 20,
   message: {
     success: false,
     message: 'Límite de operaciones críticas alcanzado. Intenta en 1 hora.'
   },
   standardHeaders: true,
   legacyHeaders: false,
-   validate: { xForwardedForHeader: false } 
+  skip: (req) => process.env.NODE_ENV === 'development',
+   validate: { xForwardedForHeader: false }
 });
 
 // Rate limiter específico para SEO/bots (más permisivo)

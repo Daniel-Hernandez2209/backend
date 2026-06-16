@@ -11,7 +11,7 @@ const createTransporter = () => {
   }
 
   // Configuración para Gmail (cambiar según tu proveedor)
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT),
     secure: process.env.EMAIL_SECURE === "true",
@@ -335,6 +335,8 @@ const sendWelcomeEmail = async (user) => {
     },
   });
 };
+
+export { sendEmail, validateEmailConfig, sendWelcomeEmail, getEmailTemplate };
 
 export default {
   sendEmail,

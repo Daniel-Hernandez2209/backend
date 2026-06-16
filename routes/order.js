@@ -128,7 +128,7 @@ const createOrderValidation = [
     .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/)
     .withMessage('Departamento inválido'),
   body('payment.method')
-    .isIn(['pse', 'cash_on_delivery', 'bank_transfer'])
+    .isIn(['wompi', 'pse', 'cash_on_delivery', 'bank_transfer'])
     .withMessage('Método de pago no válido')
 ];
 

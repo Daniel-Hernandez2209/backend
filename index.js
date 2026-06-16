@@ -116,11 +116,13 @@ import orderRoutes from './routes/order.js';
 import uploadRoutes from './routes/upload.js';
 import categoryRoutes from './routes/categories.js';
 import adminCategoryRoutes from './routes/admin/categories.js';
+import paymentRoutes from './routes/payments.js';
 
 // Usar rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/admin/categories', adminCategoryRoutes);
