@@ -14,11 +14,40 @@ import {
   invalidateUserRefreshTokens,
 } from "../utils/redis.js";
 
+// Opciones base de cookie — HttpOnly impide acceso desde JS (inmune a XSS)
+const COOKIE_BASE = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  // same-site estricto funciona porque frontend y API comparten dominio raíz (athenabrand.co)
+  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+};
+
+// Setea access_token y refresh_token como cookies HttpOnly
+const setAuthCookies = (res, { accessToken, refreshToken }) => {
+  res.cookie("access_token", accessToken, {
+    ...COOKIE_BASE,
+    maxAge: 15 * 60 * 1000,       // 15 minutos — igual que JWT_EXPIRES_IN
+    path: "/",
+  });
+  res.cookie("refresh_token", refreshToken, {
+    ...COOKIE_BASE,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
+    path: "/api/auth/refresh-token",  // solo enviado a ese endpoint
+  });
+};
+
+// Limpia ambas cookies al hacer logout
+const clearAuthCookies = (res) => {
+  res.clearCookie("access_token",  { ...COOKIE_BASE, path: "/" });
+  res.clearCookie("refresh_token", { ...COOKIE_BASE, path: "/api/auth/refresh-token" });
+};
+
 // Función para generar JWT
 const generateTokenPair = async (userId, role) => {
   const expiresIn = process.env.JWT_EXPIRES_IN || "15m";
   const accessToken = jwt.sign({ userId, role }, process.env.JWT_SECRET, {
     expiresIn,
+    algorithm: "HS256",
   });
 
   const refreshToken = crypto.randomBytes(40).toString("hex");
@@ -43,7 +72,8 @@ const createUserResponse = (user) => {
 class AuthController {
   static async refreshToken(req, res) {
     try {
-      const { refreshToken } = req.body;
+      // Leer de cookie HttpOnly (preferido) o body (compatibilidad con clientes API)
+      const refreshToken = req.cookies?.refresh_token || req.body?.refreshToken;
       if (!refreshToken) {
         return res
           .status(400)
@@ -69,18 +99,15 @@ class AuthController {
           .json({ success: false, message: "Usuario no válido" });
       }
 
-      // Generar nuevos tokens
       const newTokens = await generateTokenPair(user._id, user.role);
 
-      // Opcional: eliminar el refresh token antiguo (mejor seguridad)
+      // Rotar refresh token — eliminar el anterior
       await getRedisClient().del(`rt:${refreshToken}`);
       await getRedisClient().del(`refresh_token:${userId}`);
 
-      res.json({
-        success: true,
-        message: "Token renovado",
-        token: newTokens,
-      });
+      setAuthCookies(res, newTokens);
+
+      res.json({ success: true, message: "Token renovado" });
     } catch (error) {
       logger.error("Error en refreshToken:", error);
       res.status(500).json({ success: false, message: "Error interno" });
@@ -139,21 +166,16 @@ class AuthController {
           },
         });
       } catch (emailError) {
-        console.error("Error enviando email de verificación:", emailError);
-        // No fallar el registro si el email falla
+        logger.warn("Error enviando email de verificación", { error: emailError.message, userId: user._id });
       }
 
-      // Generar JWT
       const token = await generateTokenPair(user._id, user.role);
-
-      // Respuesta sin datos sensibles
+      setAuthCookies(res, token);
       const userResponse = createUserResponse(user);
 
       res.status(201).json({
         success: true,
-        message:
-          "Usuario registrado exitosamente. Revisa tu email para verificar tu cuenta.",
-        token,
+        message: "Usuario registrado exitosamente. Revisa tu email para verificar tu cuenta.",
         user: userResponse,
       });
     } catch (error) {
@@ -190,21 +212,19 @@ class AuthController {
         });
       }
       const token = await generateTokenPair(user._id, user.role);
+      setAuthCookies(res, token);
       const userResponse = createUserResponse(user);
 
-      // Respuesta exitosa
       return res.json({
         success: true,
         message: "Inicio de sesión exitoso",
-        token,
         user: userResponse,
       });
     } catch (error) {
-      console.error("Error en login:", error);
+      logger.error("Error en login", { error: error.message, stack: error.stack, ip: req.ip });
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",
-        error: process.env.NODE_ENV === "development" ? error.message : {},
       });
     }
   }
@@ -230,7 +250,7 @@ class AuthController {
         user,
       });
     } catch (error) {
-      console.error("Error obteniendo perfil:", error);
+      logger.error("Error obteniendo perfil", { error: error.message, userId: req.userId });
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",
@@ -292,7 +312,7 @@ class AuthController {
         user,
       });
     } catch (error) {
-      console.error("Error actualizando perfil:", error);
+      logger.error("Error actualizando perfil", { error: error.message, userId: req.userId });
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",
@@ -336,7 +356,7 @@ class AuthController {
         message: "Email verificado exitosamente",
       });
     } catch (error) {
-      console.error("Error verificando email:", error);
+      logger.error("Error verificando email", { error: error.message });
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",
@@ -382,7 +402,7 @@ class AuthController {
           },
         });
       } catch (emailError) {
-        console.error("Error enviando email de reset:", emailError);
+        logger.error("Error enviando email de reset", { error: emailError.message, userId: user._id });
         user.passwordResetToken = undefined;
         user.passwordResetExpires = undefined;
         await user.save();
@@ -398,7 +418,7 @@ class AuthController {
         message: "Se ha enviado un enlace de recuperación a tu email",
       });
     } catch (error) {
-      console.error("Error en forgot password:", error);
+      logger.error("Error en forgot password", { error: error.message });
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",
@@ -456,7 +476,7 @@ class AuthController {
           "Contraseña restablecida exitosamente. Por favor inicia sesión nuevamente.",
       });
     } catch (error) {
-      console.error("Error en reset password:", error);
+      logger.error("Error en reset password", { error: error.message });
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",
@@ -483,6 +503,7 @@ class AuthController {
 
       await getRedisClient().del(`refresh_token:${userId}`);
 
+      clearAuthCookies(res);
       res.json({ success: true, message: "Sesión cerrada correctamente" });
     } catch (error) {
       logger.error("Error en logout:", error);
@@ -550,7 +571,7 @@ class AuthController {
           "Contraseña cambiada exitosamente. Por favor inicia sesión nuevamente.",
       });
     } catch (error) {
-      console.error("Error cambiando contraseña:", error);
+      logger.error("Error cambiando contraseña", { error: error.message, userId: req.userId });
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",

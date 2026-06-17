@@ -12,8 +12,7 @@ const globalLimiter = rateLimit({
   message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => process.env.NODE_ENV === 'development',
-   validate: { xForwardedForHeader: false }
+  validate: { xForwardedForHeader: false }
 });
 
 // Para rutas públicas generales (lectura)
@@ -26,11 +25,6 @@ const publicReadLimiter = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  // Excluir del rate limit si es necesario
-  skip: (req) => {
-    // Ejemplo: no aplicar rate limit a IPs internas
-    return req.ip === '127.0.0.1';
-  },
    validate: { xForwardedForHeader: false } 
 });
 
@@ -50,7 +44,7 @@ const heavyReadLimiter = rateLimit({
 // Para rutas administrativas (escritura)
 const adminWriteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'development' ? 1000 : 50,
+  max: 50,
   message: {
     success: false,
     message: 'Demasiadas solicitudes al área administrativa. Intenta en 15 minutos.'
@@ -58,8 +52,7 @@ const adminWriteLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.user?.id || req.ip,
-  skip: (req) => process.env.NODE_ENV === 'development',
-   validate: { xForwardedForHeader: false }
+  validate: { xForwardedForHeader: false }
 });
 // Para rutas de autenticación (login, registro)
 const authLimiter = rateLimit({
@@ -81,8 +74,7 @@ const criticalAdminLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => process.env.NODE_ENV === 'development',
-   validate: { xForwardedForHeader: false }
+  validate: { xForwardedForHeader: false }
 });
 
 // Rate limiter específico para SEO/bots (más permisivo)

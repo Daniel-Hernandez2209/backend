@@ -1,5 +1,6 @@
 // db.js - Conexión MongoDB con manejo de errores avanzado (SEGURA)
 import mongoose from "mongoose";
+import logger from "./utils/logger.js";
 
 let isConnected = false;
 let lastURI = null;
@@ -24,7 +25,7 @@ const connectDB = async () => {
   if (isConnected && mongoose.connection.readyState === 1) return;
 
   if (mongoose.connection.readyState === 2) {
-    console.log("⏳ Esperando conexión existente...");
+    logger.info("Esperando conexión existente a MongoDB");
     await new Promise((resolve) => mongoose.connection.once("connected", resolve));
     return;
   }
@@ -53,7 +54,7 @@ const connectDB = async () => {
       await mongoose.disconnect();
     }
 
-    console.log("🔍 Intentando conectar a MongoDB...");
+    logger.info("Intentando conectar a MongoDB");
 
     // Conectar con configuración segura
     await mongoose.connect(uri, {
@@ -68,24 +69,20 @@ const connectDB = async () => {
 
     isConnected = true;
     lastURI = uri;
-    console.log("✅ MongoDB conectado exitosamente");
+    logger.info("MongoDB conectado exitosamente");
 
   } catch (error) {
     isConnected = false;
-    console.error("❌ Error de conexión a MongoDB");
-
-    if (process.env.NODE_ENV === "development") {
-      console.error("🔍 Detalle:", error.message);
-    }
+    logger.error("Error de conexión a MongoDB", { code: error.code, message: error.message });
 
     // Reintento automático (máximo 3 veces)
     if (!connectDB.retryCount) connectDB.retryCount = 0;
     if (connectDB.retryCount < 3) {
       connectDB.retryCount++;
-      console.log(`🔁 Reintentando conexión (${connectDB.retryCount}/3)...`);
+      logger.warn(`Reintentando conexión a MongoDB (${connectDB.retryCount}/3)`);
       setTimeout(connectDB, 3000);
     } else {
-      console.error("🚨 No se pudo conectar a la base de datos tras múltiples intentos.");
+      logger.error("No se pudo conectar a MongoDB tras múltiples intentos");
     }
   }
 };
@@ -95,24 +92,24 @@ const connectDB = async () => {
 // ========================================
 mongoose.connection.on("disconnected", () => {
   isConnected = false;
-  console.warn("🔌 MongoDB desconectado");
+  logger.warn("MongoDB desconectado");
 });
 
 mongoose.connection.on("error", (err) => {
-  console.error("❌ Error en conexión MongoDB:", err.message);
+  logger.error("Error en conexión MongoDB", { message: err.message });
   isConnected = false;
 });
 
 // Cierre limpio (para entornos como Vercel)
 process.on("SIGINT", async () => {
   await mongoose.disconnect();
-  console.log("🧹 Conexión MongoDB cerrada por SIGINT");
+  logger.info("Conexión MongoDB cerrada por SIGINT");
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   await mongoose.disconnect();
-  console.log("🧹 Conexión MongoDB cerrada por SIGTERM");
+  logger.info("Conexión MongoDB cerrada por SIGTERM");
   process.exit(0);
 });
 

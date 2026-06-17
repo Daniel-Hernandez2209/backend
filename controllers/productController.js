@@ -8,6 +8,25 @@ import mongoose from "mongoose";
 // Config / Constantes
 // -----------------------------
 const VALID_CATEGORIES = ['hombre', 'mujer', 'deportivos', 'hoodies-sacos', 'chaquetas'];
+
+// Campos permitidos en create/update — previene mass assignment
+const ALLOWED_CREATE_FIELDS = [
+  'name', 'description', 'price', 'discountPrice', 'category', 'subcategory',
+  'sizes', 'images', 'sku', 'tags', 'isFeatured', 'material', 'care', 'brand'
+];
+const ALLOWED_UPDATE_FIELDS = [
+  'name', 'description', 'price', 'discountPrice', 'category', 'subcategory',
+  'sizes', 'images', 'sku', 'tags', 'isFeatured', 'material', 'care', 'brand', 'isActive'
+];
+
+const pickFields = (source, allowed) => {
+  const result = {};
+  for (const key of allowed) {
+    if (key in source) result[key] = source[key];
+  }
+  return result;
+};
+
 const ALLOWED_SORT_FIELDS = {
   price_asc: { price: 1 },
   price_desc: { price: -1 },
@@ -392,7 +411,7 @@ class ProductController {
         return res.status(400).json({ success: false, message: 'Datos de producto inválidos', errors: errors.array() });
       }
 
-      const productData = { ...req.body };
+      const productData = pickFields(req.body, ALLOWED_CREATE_FIELDS);
 
       if (productData.name) {
         const baseSlug = generateSlug(productData.name);
@@ -437,7 +456,7 @@ class ProductController {
         return res.status(400).json({ success: false, message: 'Datos de actualización inválidos', errors: errors.array() });
       }
 
-      const updateData = { ...req.body };
+      const updateData = pickFields(req.body, ALLOWED_UPDATE_FIELDS);
 
       if (updateData.name) {
         const baseSlug = generateSlug(updateData.name);
@@ -451,7 +470,7 @@ class ProductController {
         }
       }
 
-      const product = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: false, select: '-__v' });
+      const product = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, select: '-__v' });
       if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado' });
 
       logger.info('Producto actualizado', { userId: req.user?.id, productId: product._id, changes: updateData });
@@ -793,12 +812,19 @@ static async batchOperations(req, res) {
         // Solo permitir actualizar ciertos campos de forma segura
         const allowedFields = ['isFeatured', 'isActive', 'category'];
         const updateFields = {};
-        
-        Object.keys(data).forEach(key => {
-          if (allowedFields.includes(key)) {
-            updateFields[key] = data[key];
+
+        for (const key of allowedFields) {
+          if (!(key in data)) continue;
+          if (key === 'category') {
+            if (!VALID_CATEGORIES.includes(data[key])) {
+              return res.status(400).json({ success: false, message: 'Categoría no válida' });
+            }
           }
-        });
+          if (key === 'isFeatured' || key === 'isActive') {
+            if (typeof data[key] !== 'boolean') continue;
+          }
+          updateFields[key] = data[key];
+        }
 
         if (Object.keys(updateFields).length === 0) {
           return res.status(400).json({

@@ -8,26 +8,21 @@ import rateLimit from "express-rate-limit";
 // Middleware de autenticación básico
 const auth = async (req, res, next) => {
   try {
-    let token = req.headers.authorization || req.header("Authorization");
+    // Cookie HttpOnly (navegadores) → Authorization header (Postman / clientes API)
+    let token = req.cookies?.access_token;
 
-    // Verificar si existe el token
     if (!token) {
+      const authHeader = req.headers.authorization || req.header("Authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.slice(7);
+      }
+    }
+
+    if (!token || typeof token !== "string" || token.length < 10) {
       return res.status(401).json({
         success: false,
         message: "Acceso denegado. Token no proporcionado.",
       });
-    }
-    // Validar formato básico del token
-    if (!token || typeof token !== "string" || token.length < 10) {
-      return res.status(401).json({
-        success: false,
-        message: "Formato de token inválido.",
-      });
-    }
-
-    // Remover 'Bearer ' del token
-    if (token.startsWith("Bearer ")) {
-      token = token.slice(7, token.length);
     }
 
     // Verificar token
@@ -128,7 +123,14 @@ const adminAuth = async (req, res, next) => {
 // Middleware opcional - no requiere autenticación pero la detecta
 const optionalAuth = async (req, res, next) => {
   try {
-    let token = req.header("Authorization");
+    let token = req.cookies?.access_token;
+
+    if (!token) {
+      const authHeader = req.header("Authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.slice(7);
+      }
+    }
 
     if (!token) {
       req.userId = null;
@@ -136,12 +138,8 @@ const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    if (token.startsWith("Bearer ")) {
-      token = token.slice(7, token.length);
-    }
-
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
       const user = await User.findById(decoded.userId);
 
       if (user && user.isActive) {

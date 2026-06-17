@@ -2,6 +2,15 @@
 import sharp from 'sharp';
 import path from 'path';
 
+// Mapa de MIME a formato sharp — usamos solo formatos sin riesgo de animaciones o scripts
+const SAFE_FORMAT = {
+  'image/jpeg': 'jpeg',
+  'image/jpg':  'jpeg',
+  'image/png':  'png',
+  'image/webp': 'webp',
+  'image/gif':  'jpeg', // GIF → JPEG: elimina animaciones y scripts en frames
+};
+
 /**
  * Middleware avanzado para validar imágenes antes de subirlas a Cloudinary.
  * Protege contra:
@@ -89,12 +98,26 @@ export default async function validateImage(req, res, next) {
           message: `La imagen "${file.originalname}" excede las dimensiones máximas permitidas (${metadata.width}x${metadata.height}). Máximo ${maxWidth}x${maxHeight}px.`,
         });
       }
+
+      // 5️⃣ Re-encodear con sharp para eliminar payloads embebidos y metadata EXIF/GPS
+      // Esta conversión fuerza que solo los píxeles lleguen a Cloudinary
+      const outputFormat = SAFE_FORMAT[file.mimetype] || 'jpeg';
+      try {
+        file.buffer = await sharp(file.buffer)
+          .toFormat(outputFormat, { quality: 88 })
+          .toBuffer();
+        file.mimetype = outputFormat === 'jpeg' ? 'image/jpeg' : `image/${outputFormat}`;
+      } catch (sanitizeErr) {
+        return res.status(400).json({
+          success: false,
+          message: `El archivo "${file.originalname}" no pudo ser procesado.`,
+        });
+      }
     }
 
-    // ✅ Si pasa todas las validaciones, continuar
+    // ✅ Si pasa todas las validaciones y sanitización, continuar
     next();
   } catch (error) {
-    console.error('❌ Error en validación de imagen:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno validando imagen',

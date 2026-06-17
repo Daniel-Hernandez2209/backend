@@ -41,12 +41,30 @@ if (process.env.NODE_ENV === "production") {
 // 🌐 CORS — debe ir PRIMERO para que todas las respuestas incluyan los headers
 // ===========================================
 
+// Orígenes permitidos desde variable de entorno (comma-separated)
+const getAllowedOrigins = () =>
+  (process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+// Regex para preview deployments de Vercel (los wildcards de string no funcionan en cors)
+const VERCEL_PREVIEW_RE = /^https:\/\/athena-brand-frontend-[a-z0-9-]+\.vercel\.app$/;
+
 const corsOptions = {
-  origin: [
-    "http://localhost:4200",
-    "https://athena-brand-frontend.vercel.app",
-    "https://athena-brand-frontend-git-*.vercel.app",
-  ],
+  origin: (origin, callback) => {
+    // Permitir requests sin origin: apps móviles, Postman, server-to-server
+    if (!origin) return callback(null, true);
+
+    const allowed = getAllowedOrigins();
+
+    if (allowed.includes(origin) || VERCEL_PREVIEW_RE.test(origin)) {
+      return callback(null, true);
+    }
+
+    logger.warn("CORS: origen rechazado", { origin });
+    callback(new Error("No permitido por CORS"));
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
@@ -236,7 +254,7 @@ const syncIndexes = async () => {
 (async () => {
   try {
     await connectDB();
-    console.log("✅ Conectado a MongoDB al iniciar el servidor");
+    logger.info("Conectado a MongoDB al iniciar el servidor");
 
     // ⚡ IMPORTANTE: NO esperar syncIndexes (evita timeout en Vercel)
     // La sincronización ocurre en background sin bloquear
@@ -254,7 +272,7 @@ const syncIndexes = async () => {
       });
     }
   } catch (error) {
-    console.error("❌ Error al conectar la base de datos:", error.message);
+    logger.error("Error al conectar la base de datos", { error: error.message });
   }
 })();
 
@@ -365,8 +383,7 @@ app.use((err, req, res, next) => {
     return res.status(403).json({ success: false, message: err.message });
   }
 
-  logger.error(err, req);
-  console.error("❌ Error:", err);
+  logger.error("Error no manejado", { message: err.message, stack: err.stack, url: req.originalUrl });
 
   res.status(err.status || 500).json({
     success: false,
@@ -397,8 +414,7 @@ app.use("*", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 API disponible en http://localhost:${PORT}/api`);
+  logger.info(`Servidor corriendo en puerto ${PORT}`);
 });
 
 export default app;

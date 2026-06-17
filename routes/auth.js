@@ -237,7 +237,6 @@ router.post("/logout", generalLimiter, auth, AuthController.logout);
 // MANEJO DE ERRORES GLOBAL
 // ========================================
 router.use((error, req, res, next) => {
-  console.error("❌ Error en rutas de autenticación:", error);
   return res.status(error.status || 500).json({
     success: false,
     message: error.message || "Error interno del servidor",
