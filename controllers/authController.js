@@ -18,8 +18,8 @@ import {
 const COOKIE_BASE = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  // same-site estricto funciona porque frontend y API comparten dominio raíz (athenabrand.co)
-  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+  // "none" requerido para cookies cross-origin (Vercel frontend → Fly.io API)
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 };
 
 // Setea access_token y refresh_token como cookies HttpOnly
