@@ -149,11 +149,8 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// ✅ CSRF Protection Setup
+// CSRF no aplica para SPA con JWT Bearer tokens en Authorization header
 app.use(cookieParser());
-if (process.env.NODE_ENV === "production") {
-  app.use(csrfProtection);
-}
 
 // ===========================================
 // 🗂️ ARCHIVOS ESTÁTICOS
