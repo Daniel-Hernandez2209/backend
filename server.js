@@ -26,9 +26,10 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", 1); // Necesario para Vercel
 
-// ✅ HTTPS Enforcement - Redirect HTTP to HTTPS in production
+// ✅ HTTPS Enforcement - Redirect HTTP to HTTPS in production (skip health/readiness)
 if (process.env.NODE_ENV === "production") {
   app.use((req, res, next) => {
+    if (req.path === "/health" || req.path === "/readiness") return next();
     if (req.header("x-forwarded-proto") !== "https") {
       res.redirect(`https://${req.header("host")}${req.url}`);
     } else {
@@ -413,7 +414,7 @@ app.use("*", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   logger.info(`Servidor corriendo en puerto ${PORT}`);
 });
 
