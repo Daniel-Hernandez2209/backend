@@ -107,7 +107,7 @@ class AuthController {
 
       setAuthCookies(res, newTokens);
 
-      res.json({ success: true, message: "Token renovado" });
+      res.json({ success: true, message: "Token renovado", accessToken: newTokens.accessToken });
     } catch (error) {
       logger.error("Error en refreshToken:", error);
       res.status(500).json({ success: false, message: "Error interno" });
@@ -177,6 +177,7 @@ class AuthController {
         success: true,
         message: "Usuario registrado exitosamente. Revisa tu email para verificar tu cuenta.",
         user: userResponse,
+        accessToken: token.accessToken,
       });
     } catch (error) {
       // Log interno sin exposición al cliente
@@ -219,6 +220,7 @@ class AuthController {
         success: true,
         message: "Inicio de sesión exitoso",
         user: userResponse,
+        accessToken: token.accessToken,
       });
     } catch (error) {
       logger.error("Error en login", { error: error.message, stack: error.stack, ip: req.ip });
